@@ -4,7 +4,7 @@ hypervector -- Simple, general, pure Python vectors
 Issue tracker: https://github.com/benburrill/hypervector/issues
 """
 
-__version__ = "0.0.0"
+__version__ = "0.0.1"
 __author__ = "Ben Burrill"
 __license__ = "Public Domain"
 
