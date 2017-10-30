@@ -4,6 +4,7 @@
 
 # Packaging and venvs
 **/*.egg-info/
+/dist/
 /.venv/
 
 # Testing and coverage

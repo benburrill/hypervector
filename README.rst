@@ -64,8 +64,9 @@ Alternatives
  * `numpy <http://www.numpy.org/>`_
  * `pyeuclid <https://pypi.python.org/pypi/euclid3>`_ |--| Has (among other things) ``Vector2`` and ``Vector3`` types.  Also has packages for *Python* 2 and *Python* 3.
 
-Contact
--------
+Links
+-----
+| Get `hypervector from PyPi`_: ``pip install hypervector``
 | Report bugs and offer suggestions at the github `issues`_ page.
 
 .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. ..
@@ -75,6 +76,7 @@ Contact
 .. _tox: https://pypi.python.org/pypi/tox
 
 .. Links
+.. _hypervector from PyPi: https://pypi.python.org/pypi/hypervector
 .. _issues: https://github.com/benburrill/hypervector/issues
 
 .. Definitions
