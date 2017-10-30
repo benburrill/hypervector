@@ -61,8 +61,8 @@ Alternatives
 ------------
 | There are many other libraries with similar features to ``hypervector``.  Some notable examples:
 
- * `numpy <http://www.numpy.org/>`_
- * `pyeuclid <https://pypi.python.org/pypi/euclid3>`_ |--| Has (among other things) ``Vector2`` and ``Vector3`` types.  Also has packages for *Python* 2 and *Python* 3.
+* `numpy <http://www.numpy.org/>`_
+* `pyeuclid <https://pypi.python.org/pypi/euclid3>`_ |--| Has (among other things) ``Vector2`` and ``Vector3`` types.  Also has packages for *Python* 2 and *Python* 3.
 
 Links
 -----
