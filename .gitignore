@@ -1,0 +1,17 @@
+# Bytecode caches
+**/__pycache__/
+**/*.pyc
+
+# Packaging and venvs
+**/*.egg-info/
+/.venv/
+
+# Testing and coverage
+/.cache/
+/.hypothesis/
+/.tox/
+/htmlcov/
+/.coverage
+
+# Editor crud
+**/*.sw[a-p]
