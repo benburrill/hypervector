@@ -64,10 +64,11 @@ class VectorType(type):
     ``IndexError`` must be raised.
     """
 
-    def __new__(mcls, *args, **kwargs):
+    def __new__(mcls, name, bases, namespace, *, dim=None, **kwargs):
         """ Validate the class members """
 
-        cls = super().__new__(mcls, *args, **kwargs)
+        cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+        cls._dim = dim
 
         for name in dir(cls):
             try:
@@ -78,6 +79,21 @@ class VectorType(type):
                 )
             except IndexError: pass
         return cls
+
+    @property
+    def dim(cls):
+        return self._dim
+
+    @functools.lru_cache()
+    def __getitem__(cls, dim):
+        dim = int(dim)
+        name = f"{cls.__name__}[{dim}]"
+
+        if cls.dim is not None:
+            raise TypeError(f"Can only create {name} from a "
+                            f"dimensionless type")
+
+        return type(cls)(name, (cls,), {}, dim=dim)
 
     def __getattr__(cls, attr):
         """ Named unit vectors as attributes """
@@ -91,14 +107,13 @@ class VectorType(type):
         raise AttributeError(f"type object {cls.__name__!r} "
                              f"has no attribute {attr!r}")
 
+    @property
+    @functools.lru_cache()
+    def zero(cls):
+        return cls()
 
-class Vector(metaclass=VectorType):
-    """ Infinite-dimensional vector type """
 
-    __slots__ = ["__data", "__frozen"]
-
-    name_groups = ["xyzw", "ijk", "rgba"]
-
+class BaseVector(metaclass=VectorType):
     @classmethod
     def get_name_group(cls, names):
         """ Return the relevant name group string if one exists """
@@ -107,6 +122,18 @@ class Vector(metaclass=VectorType):
             if names.issubset(set(group)):
                 return group
         raise IndexError(f"No matching name group for {names}")
+
+    @types.DynamicClassAttribute
+    def dim(self):
+        return type(self).dim
+
+
+class Vector(BaseVector):
+    """ Infinite-dimensional vector type """
+
+    __slots__ = ["__data", "__frozen"]
+
+    name_groups = ["xyzw", "ijk", "rgba"]
 
     def __new__(cls, *args, **masks):
         """
@@ -454,7 +481,7 @@ class Vector(metaclass=VectorType):
 
     def __mul__(self, other):
         """ vector * scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, BaseVector):
             return NotImplemented
         return self.from_iterable(comp * other for comp in self)
 
@@ -464,7 +491,7 @@ class Vector(metaclass=VectorType):
 
     def __truediv__(self, other):
         """ vector / scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, BaseVector):
             return NotImplemented
         return self.from_iterable(
             comp / other for comp in self.pad_iter(1)
@@ -472,7 +499,7 @@ class Vector(metaclass=VectorType):
 
     def __floordiv__(self, other):
         """ vector // scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, BaseVector):
             return NotImplemented
         return self.from_iterable(
             comp // other for comp in self.pad_iter(1)
@@ -527,6 +554,11 @@ class Vector(metaclass=VectorType):
                 return 0
         else:
             return self.from_iterable(self[idx] for idx in indices)
+
+    def __len__(self):
+        if self.dim is not None:
+            return self.dim
+        raise TypeError("Infinite vector type has no len()")
 
     def __getattr__(self, attr):
         """
