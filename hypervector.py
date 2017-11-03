@@ -545,7 +545,7 @@ class Vector(metaclass=VectorType):
             return self[(-1 if name == "_" else group.index(name)
                          for name in attr)]
         except IndexError:
-            raise AttributeError(f"{type(attr).__name__!r} object "
+            raise AttributeError(f"{type(self).__name__!r} object "
                                  f"has no attribute {attr!r}") from None
 
     def _check_frost(self):
