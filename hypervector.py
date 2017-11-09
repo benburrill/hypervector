@@ -81,7 +81,7 @@ class VectorType(type):
 
         for name in dir(cls):
             try:
-                group = cls.get_name_group(name.replace("_", ""))
+                group = cls.get_name_group(name)
                 raise AttributeError(
                     f"Attribute conflict: collision between name group "
                     f"{group!r} and class member {name!r}"
@@ -281,6 +281,12 @@ class Vector(metaclass=VectorType):
         for adj in comps:
             data.append(math.atan2(opp, adj))
             opp = math.hypot(opp, adj)
+        # TODO: what should we return for finite vectors?  This is
+        # actually a bit problematic for Vector[0]().heading.  Should
+        # just return a Vector?  Should we return a Vector[len(data)]?
+        # Should the vector we return be dependent on whether dim is
+        # None?  Should we not return a Vector at all and instead just
+        # return a tuple or something?
         return self.from_iterable(reversed(data))
 
     @property
@@ -361,9 +367,7 @@ class Vector(metaclass=VectorType):
 
     def dot(self, other):
         """ Dot product of two vectors """
-        if isinstance(other, type(self)):
-            return sum(_zmap(operator.mul, self, other))
-        raise TypeError("Dot product operands must be of the same type")
+        return sum(self.vectorize(operator.mul)(self, other))
 
     def __matmul__(self, other):
         """ vec_1 @ vec_2: alias for ``vec_1.dot(vec_2)`` """
@@ -388,6 +392,10 @@ class Vector(metaclass=VectorType):
         """
 
         n = len(vecs) + 1
+        
+        if n > cls.dim:
+            raise TypeError(f"{cls.dim} dimensional cross product "
+                            f"takes {cls.dim - 1} vectors")
 
         # Matrix with n-1 column vectors from vecs.  The final column is
         # made up of corresponding unit vectors.  This particular
@@ -422,37 +430,15 @@ class Vector(metaclass=VectorType):
 
     def __eq__(self, other):
         """ Two vectors are equal if all their components are equal """
-        if not isinstance(other, type(self)):
-            return False
-        return all(_zmap(operator.eq, self, other))
+        return (isinstance(other, type(self)) and 
+                self.dim == other.dim and
+                all(_zmap(operator.eq, self, other)))
 
     def __hash__(self):
         result = 0
         for comp in self:
             result ^= hash(comp) - hash(0)
         return result
-
-    def __lshift__(self, shift):
-        """
-        vector << integer
-
-        Shift the components of a vector; effectively equivalent to
-        ``vector[shift:]``
-        """
-
-        if shift < 0:
-            return self >> -shift
-        return self.from_iterable(it.islice(self, shift, None))
-
-    def __rshift__(self, shift):
-        """
-        vector >> integer
-
-        Shift the components of a vector
-        """
-        if shift < 0:
-            return self << -shift
-        return self.from_iterable(it.chain(it.repeat(0, shift), self))
 
     def __iter__(self):
         """
@@ -466,6 +452,9 @@ class Vector(metaclass=VectorType):
 
         return iter(self.__data)
 
+    # TODO: how much sense does our iteration api, especially pad_iter,
+    # make with the advent of finite vectors?  We could potentially make
+    # it internal or redesign things.  Or just keep it.  Not sure.
     def pad_iter(self, num=None):
         """
         Padded version of ``__iter__``
@@ -490,10 +479,10 @@ class Vector(metaclass=VectorType):
         """ func(0, 0, ...) is assumed to be 0 """
         @functools.wraps(func)
         def vec_func(*vecs):
-            if not all(isinstance(vec, cls) for vec in vecs):
-                raise TypeError(f"All arguments must be instances of "
-                                f"{cls.__name__!r}")
-            return cls.from_iterable(_zmap(func, *vecs))
+            if all(isinstance(vec, Vector) and vec.mag == cls.mag for vec in vecs):
+                return cls.from_iterable(_zmap(func, *vecs))
+            raise TypeError(f"All arguments must be {cls.mag} "
+                            f"dimensional vectors")
         return vec_func
 
     def __add__(self, other):
@@ -506,7 +495,7 @@ class Vector(metaclass=VectorType):
 
     def __mul__(self, other):
         """ vector * scalar """
-        if isinstance(other, BaseVector):
+        if isinstance(other, Vector):
             return NotImplemented
         return self.from_iterable(comp * other for comp in self)
 
@@ -516,7 +505,7 @@ class Vector(metaclass=VectorType):
 
     def __truediv__(self, other):
         """ vector / scalar """
-        if isinstance(other, BaseVector):
+        if isinstance(other, Vector):
             return NotImplemented
         return self.from_iterable(
             comp / other for comp in self.pad_iter(1)
@@ -524,7 +513,7 @@ class Vector(metaclass=VectorType):
 
     def __floordiv__(self, other):
         """ vector // scalar """
-        if isinstance(other, BaseVector):
+        if isinstance(other, Vector):
             return NotImplemented
         return self.from_iterable(
             comp // other for comp in self.pad_iter(1)
@@ -542,11 +531,14 @@ class Vector(metaclass=VectorType):
         """ Rounds the vector, snapping it to the grid defined by n """
         return self.vectorize(functools.partial(round, ndigits=n))(self)
 
-    @staticmethod
-    def _translate_slice(idx):
+    @classmethod
+    def _translate_slice(cls, idx):
         """ Translate a slice of infinite space into __data space """
+        if cls.dim is not None:
+            return idx
         if None is not idx.step < 0:
-            raise ValueError("Vector slice step cannot be negative")
+            raise ValueError("Infinite vector slice step cannot be "
+                             "negative")
         if None is not idx.start < 0:
             return slice(0)
         if None is not idx.stop < 0:
@@ -556,9 +548,6 @@ class Vector(metaclass=VectorType):
     def __getitem__(self, idx):
         """
         idx is an index, a slice, or an iterable of indices.
-
-        Negative indices go backwards from the "end" of the infinite
-        vector and are thus guaranteed to be 0.
 
         The use of nested iterables or slice-iterable combinations as
         indices is undefined behavior.
@@ -571,31 +560,26 @@ class Vector(metaclass=VectorType):
                 idx = self._translate_slice(idx)
                 return self.from_iterable(self.__data[idx])
 
-            if idx < 0:
+            if self.dim is None and idx < 0:
                 return 0
             try:
                 return self.__data[idx]
             except IndexError:
-                return 0
+                if self.dim is None:
+                    return 0
+                raise
         else:
             return self.from_iterable(self[idx] for idx in indices)
 
     def __getattr__(self, attr):
-        """
-        Swizzle-style lookups.
-
-        In multi-character attributes, underscores may be used as
-        placeholders as a readable way to shift the vector.
-        """
+        """ Swizzle-style lookups """
 
         try:
             if len(attr) == 1:
                 return self[self.get_name_group(attr).index(attr)]
 
-            group = self.get_name_group(attr.replace("_", ""))
-            # TODO: I would prefer not rely on negative indices here
-            return self[(-1 if name == "_" else group.index(name)
-                         for name in attr)]
+            group = self.get_name_group(attr)
+            return self[group.index(name) for name in attr]
         except IndexError:
             raise AttributeError(f"{type(attr).__name__!r} object "
                                  f"has no attribute {attr!r}") from None
