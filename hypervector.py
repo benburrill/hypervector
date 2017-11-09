@@ -8,7 +8,7 @@ __version__ = "0.0.1"
 __author__ = "Ben Burrill"
 __license__ = "Public Domain"
 
-__all__ = ["Vector"]
+__all__ = ["Vector", "Vector2", "Vector3"]
 
 
 import math
@@ -65,10 +65,19 @@ class VectorType(type):
     """
 
     def __new__(mcls, name, bases, namespace, *, dim=None, **kwargs):
-        """ Validate the class members """
+        """
+        Create a new Vector type, validating the class members
+
+        Unless the keyword class argument ``dim`` is passed, the created
+        vector type will be dimensionless.  ``dim`` is not inherited.
+        """
 
         cls = super().__new__(mcls, name, bases, namespace, **kwargs)
-        cls._dim = dim
+
+        if None is not dim < 0:
+            raise TypeError("Dimension must be positive")
+        else:
+            cls.__dim = dim
 
         for name in dir(cls):
             try:
@@ -82,11 +91,15 @@ class VectorType(type):
 
     @property
     def dim(cls):
-        return self._dim
+        return cls.__dim
+
+    @property
+    @functools.lru_cache()
+    def zero(cls):
+        return cls()
 
     @functools.lru_cache()
     def __getitem__(cls, dim):
-        dim = int(dim)
         name = f"{cls.__name__}[{dim}]"
 
         if cls.dim is not None:
@@ -107,35 +120,25 @@ class VectorType(type):
         raise AttributeError(f"type object {cls.__name__!r} "
                              f"has no attribute {attr!r}")
 
-    @property
-    @functools.lru_cache()
-    def zero(cls):
-        return cls()
 
-
-class BaseVector(metaclass=VectorType):
-    @classmethod
-    def get_name_group(cls, names):
-        """ Return the relevant name group string if one exists """
-        names = set(names)
-        for group in cls.name_groups:
-            if names.issubset(set(group)):
-                return group
-        raise IndexError(f"No matching name group for {names}")
-
-    @types.DynamicClassAttribute
-    def dim(self):
-        return type(self).dim
-
-
-class Vector(BaseVector):
+class Vector(metaclass=VectorType):
     """ Infinite-dimensional vector type """
 
     __slots__ = ["__data", "__frozen"]
 
     name_groups = ["xyzw", "ijk", "rgba"]
 
-    def __new__(cls, *args, **masks):
+    @classmethod
+    def get_name_group(cls, names):
+        """ Return the relevant name group string if one exists """
+        names = set(names)
+        for group in cls.name_groups:
+            group = group[:cls.dim]
+            if names.issubset(set(group)):
+                return group
+        raise IndexError(f"No matching name group for {names}")
+
+    def __new__(cls, *args, truncate=False, **masks):
         """
         Construct a vector
 
@@ -149,12 +152,20 @@ class Vector(BaseVector):
         positional arguments.
         """
 
-        if len(args) > 1:
-            *prep, _ = args
-            if any(isinstance(item, Vector) for item in prep):
-                raise TypeError("Cannot append to infinite vector")
+        arg_it, args = iter(args), []
+        for arg in arg_it:
+            args.append(arg)
+            if isinstance(arg, Vector) and arg.dim is None:
+                if not truncate and cls.dim is not None:
+                    raise TypeError("Infinite vector must be truncated")
+                if not truncate and list(arg_it):
+                    raise TypeError("Cannot append to infinite vector")
+                break
 
         comp_it = _crush(args)
+        
+        if truncate:
+            comp_it = it.islice(comp_it, cls.dim)
 
         if masks:
             try:
@@ -175,6 +186,10 @@ class Vector(BaseVector):
     def __str__(self):
         return f"<{', '.join(map(str, self))}>"
 
+    @types.DynamicClassAttribute
+    def dim(self):
+        return type(self).dim
+
     @classmethod
     def from_iterable(cls, iterable):
         """
@@ -184,8 +199,18 @@ class Vector(BaseVector):
         Vector constructor when constructing vectors from iterables.
         """
 
+        data = tuple(iterable)
+        comps = len(data)
+
+        if cls.dim is not None:
+            if cls.dim < comps:
+                raise TypeError(f"{cls.dim} dimensional vector cannot "
+                                f"have {comps} components")
+            if cls.dim > comps:
+                data += (0,) * (cls.dim - comps)
+
         self = object.__new__(cls)
-        self.__data = tuple(iterable)
+        self.__data = data
         self.__frozen = True
         return self
 
@@ -555,11 +580,6 @@ class Vector(BaseVector):
         else:
             return self.from_iterable(self[idx] for idx in indices)
 
-    def __len__(self):
-        if self.dim is not None:
-            return self.dim
-        raise TypeError("Infinite vector type has no len()")
-
     def __getattr__(self, attr):
         """
         Swizzle-style lookups.
@@ -600,3 +620,7 @@ class Vector(BaseVector):
 
     def __getstate__(self):
         return None
+
+
+Vector2 = Vector[2]
+Vector3 = Vector[3]
