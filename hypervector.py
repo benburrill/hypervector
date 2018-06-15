@@ -64,7 +64,7 @@ class VectorType(type):
     ``IndexError`` must be raised.
     """
 
-    def __new__(mcls, name, bases, namespace, *, dim=None, **kwargs):
+    def __new__(mcls, name, bases, namespace, *, dim=None, _root=None):
         """
         Create a new Vector type, validating the class members
 
@@ -72,12 +72,18 @@ class VectorType(type):
         vector type will be dimensionless.  ``dim`` is not inherited.
         """
 
-        cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+        cls = super().__new__(mcls, name, bases, namespace)
 
         if None is not dim < 0:
             raise TypeError("Dimension must be positive")
         else:
             cls.__dim = dim
+        
+        if _root is None:
+            cls._root = cls
+            cls.__derived = {}
+        else:
+            cls._root = _root
 
         for name in dir(cls):
             try:
@@ -94,19 +100,22 @@ class VectorType(type):
         return cls.__dim
 
     @property
-    @functools.lru_cache()
     def zero(cls):
         return cls()
 
-    @functools.lru_cache()
+    def _make_dim(cls, name, dim):
+        try:
+            return cls._root.__derived[dim]
+        except KeyError:
+            derived = type(cls)(name, (cls._root,), {
+                "__slots__": []
+            }, dim=dim, _root=cls._root)
+
+            cls._root.__derived[dim] = derived
+            return derived
+            
     def __getitem__(cls, dim):
-        name = f"{cls.__name__}[{dim}]"
-
-        if cls.dim is not None:
-            raise TypeError(f"Can only create {name} from a "
-                            f"dimensionless type")
-
-        return type(cls)(name, (cls,), {}, dim=dim)
+        return cls._make_dim(f"{cls._root.__name__}[{dim}]", dim)
 
     def __getattr__(cls, attr):
         """ Named unit vectors as attributes """
@@ -144,9 +153,17 @@ class Vector(metaclass=VectorType):
 
         Vector() is the zero vector.
 
-        Any combination of vectors, iterables, and scalar components can
-        be combined as positional arguments, but there may only be one
-        vector and it must be the last positional argument.
+        Vectors, iterables, and scalar components can be combined as
+        positional arguments.
+        
+        The truncate argument, when True, truncates the number of values
+        if they exceed the vector's dimensionality.  Since infinite
+        vectors have infinite values, they cannot be passed to a finite
+        vector constructor unless truncate is True.
+
+        Additionally, unless truncate is True, infinite vectors can only
+        be used as the final argument because values that follow cannot
+        be represented as they would follow an infinite sequence of 0s.
 
         Named components passed as keyword arguments are masked over any
         positional arguments.
@@ -155,7 +172,7 @@ class Vector(metaclass=VectorType):
         arg_it, args = iter(args), []
         for arg in arg_it:
             args.append(arg)
-            if isinstance(arg, Vector) and arg.dim is None:
+            if isinstance(arg, cls._root) and arg.dim is None:
                 if not truncate and cls.dim is not None:
                     raise TypeError("Infinite vector must be truncated")
                 if not truncate and list(arg_it):
@@ -184,6 +201,7 @@ class Vector(metaclass=VectorType):
         return f"{name}({', '.join(map(repr, self))})"
 
     def __str__(self):
+        # TODO: maybe indicate infinite vectors (with ellipses???)
         return f"<{', '.join(map(str, self))}>"
 
     @types.DynamicClassAttribute
@@ -281,13 +299,13 @@ class Vector(metaclass=VectorType):
         for adj in comps:
             data.append(math.atan2(opp, adj))
             opp = math.hypot(opp, adj)
-        # TODO: what should we return for finite vectors?  This is
-        # actually a bit problematic for Vector[0]().heading.  Should
-        # just return a Vector?  Should we return a Vector[len(data)]?
-        # Should the vector we return be dependent on whether dim is
-        # None?  Should we not return a Vector at all and instead just
-        # return a tuple or something?
-        return self.from_iterable(reversed(data))
+
+        if self.dim is None:
+            cls = type(self)
+        else:
+            cls = type(self)[len(data)]
+
+        return cls.from_iterable(reversed(data))
 
     @property
     def heading2(self):
@@ -351,7 +369,8 @@ class Vector(metaclass=VectorType):
         """ Return a scaled vector with magnitude ``mag`` """
         if mag:
             return self * (mag / abs(self))
-        # Return a zero vector if we can to avoid dividing by zero
+        # Return a zero vector if we can to avoid needlessly dividing by
+        # zero.
         return type(self)()
 
     def limit_mag(self, min_mag, max_mag=None):
@@ -479,7 +498,7 @@ class Vector(metaclass=VectorType):
         """ func(0, 0, ...) is assumed to be 0 """
         @functools.wraps(func)
         def vec_func(*vecs):
-            if all(isinstance(vec, Vector) and vec.mag == cls.mag for vec in vecs):
+            if all(isinstance(vec, cls._root) and vec.mag == cls.mag for vec in vecs):
                 return cls.from_iterable(_zmap(func, *vecs))
             raise TypeError(f"All arguments must be {cls.mag} "
                             f"dimensional vectors")
@@ -495,7 +514,7 @@ class Vector(metaclass=VectorType):
 
     def __mul__(self, other):
         """ vector * scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, type(self)._root):
             return NotImplemented
         return self.from_iterable(comp * other for comp in self)
 
@@ -505,7 +524,7 @@ class Vector(metaclass=VectorType):
 
     def __truediv__(self, other):
         """ vector / scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, type(self)._root):
             return NotImplemented
         return self.from_iterable(
             comp / other for comp in self.pad_iter(1)
@@ -513,7 +532,7 @@ class Vector(metaclass=VectorType):
 
     def __floordiv__(self, other):
         """ vector // scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, type(self)._root):
             return NotImplemented
         return self.from_iterable(
             comp // other for comp in self.pad_iter(1)
@@ -579,7 +598,7 @@ class Vector(metaclass=VectorType):
                 return self[self.get_name_group(attr).index(attr)]
 
             group = self.get_name_group(attr)
-            return self[group.index(name) for name in attr]
+            return self[(group.index(name) for name in attr)]
         except IndexError:
             raise AttributeError(f"{type(attr).__name__!r} object "
                                  f"has no attribute {attr!r}") from None
@@ -606,5 +625,5 @@ class Vector(metaclass=VectorType):
         return None
 
 
-Vector2 = Vector[2]
-Vector3 = Vector[3]
+Vector2 = Vector._make_dim("Vector2", 2)
+Vector3 = Vector._make_dim("Vector3", 3)
