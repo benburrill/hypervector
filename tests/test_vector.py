@@ -92,6 +92,25 @@ def test_floor_division(vec, divisor):
     else:
         assert floored_division == vec // divisor
 
+@given(vectors(), vectors())
+def test_vector_muldiv_fails(vec_1, vec_2):
+    with raises(TypeError):
+        vec_1 * vec_2
+
+    with raises(TypeError):
+        vec_1 / vec_2
+
+    with raises(TypeError):
+        vec_1 // vec_2
+
+@given(numbers(), vectors())
+def test_vector_divisor_fails(scalar, vec):
+    with raises(TypeError):
+        scalar / vec
+
+    with raises(TypeError):
+        scalar // vec
+
 @given(vectors())
 def test_repr(vec):
     """ repr(vec) be a Python expression representing vec """

@@ -555,7 +555,7 @@ class Vector(metaclass=VectorType):
 
     def __rmul__(self, other):
         """ scalar * vector """
-        return self * other
+        return self.__mul__(other)
 
     def __truediv__(self, other):
         """ vector / scalar """
