@@ -15,12 +15,8 @@ def numbers(*, min_value=-1e9, max_value=1e9):
         st.fractions(min_value=min_value, max_value=max_value)
     )
 
-def num_lists(elements=numbers(), *, average_size=3, **kwargs):
-    return st.lists(
-        elements,
-        average_size=average_size,
-        **kwargs
-    )
+def num_lists(elements=numbers(), **kwargs):
+    return st.lists(elements, **kwargs)
 
 def finite_vectors(*args, **kwargs):
     return num_lists(*args, **kwargs).map(
@@ -39,18 +35,15 @@ def vectors(*args, **kwargs):
         infinite_vectors(*args, **kwargs)
     )
 
-def _sphere_lists(*, min_size=1, max_size=None, average_size=3):
+def _sphere_lists(*, min_size=1, max_size=None):
     if min_size is not None:
         min_size -= 1
     if max_size is not None:
         max_size -= 1
-    if average_size is not None:
-        average_size -= 1
 
     return st.lists(
         st.floats(allow_nan=False, allow_infinity=False),
-        min_size=min_size, max_size=max_size,
-        average_size=average_size
+        min_size=min_size, max_size=max_size
     )
 
 # These normals strategies would not give us evenly distributed normals

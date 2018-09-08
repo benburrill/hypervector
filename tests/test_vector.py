@@ -251,7 +251,7 @@ def test_bool(vec):
     else:
         assert vec
 
-@given(vectors(average_size=2, max_size=5))
+@given(vectors(max_size=5))
 def test_round(vec):
     """
     round(vec) should return the closest grid vector
