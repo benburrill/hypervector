@@ -107,18 +107,18 @@ def test_immutability(vec):
     with raises(TypeError):
         del vec.x
 
-@given(vectors(), st.integers(min_value=0, max_value=100))
-def test_left_shift(vec, shift):
-    """ The << operator should shift components over to the left """
-    assert vec << shift == vec[shift:]
+# @given(vectors(), st.integers(min_value=0, max_value=100))
+# def test_left_shift(vec, shift):
+#     """ The << operator should shift components over to the left """
+#     assert vec << shift == vec[shift:]
 
-@given(vectors(), st.integers(min_value=0, max_value=100))
-def test_right_shift(vec, shift):
-    """ The >> operator should shift components over to the right """
-    assert vec >> shift == V(shift * [0], vec)
+# @given(vectors(), st.integers(min_value=0, max_value=100))
+# def test_right_shift(vec, shift):
+#     """ The >> operator should shift components over to the right """
+#     assert vec >> shift == V(shift * [0], vec)
 
-@given(vectors(), st.integers(min_value=0, max_value=100))
-def test_neg_shift(vec, shift):
-    """ Negative shifts should do the inverse shift operation """
-    assert vec << shift == vec >> -shift
-    assert vec >> shift == vec << -shift
+# @given(vectors(), st.integers(min_value=0, max_value=100))
+# def test_neg_shift(vec, shift):
+#     """ Negative shifts should do the inverse shift operation """
+#     assert vec << shift == vec >> -shift
+#     assert vec >> shift == vec << -shift

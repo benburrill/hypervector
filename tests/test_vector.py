@@ -95,7 +95,7 @@ def test_floor_division(vec, divisor):
 def test_repr(vec):
     """ repr(vec) be a Python expression representing vec """
     from fractions import Fraction
-    from hypervector import Vector
+    from hypervector import Vector, Vector2, Vector3
     assert isclose(vec, eval(repr(vec)))
 
 @given(vectors())
@@ -149,25 +149,25 @@ def test_normalize_with_mag(vec):
         assert isclose(mag_1, vec.normalize())
 
 @given(normals(), numbers(min_value=0), numbers(min_value=0))
-def test_limit_mag(vec, bound_1, bound_2):
-    """ limit_mag should return a vector with a magnitude in bounds """
+def test_clamp_mag(vec, bound_1, bound_2):
+    """ clamp_mag should return a vector with a magnitude in bounds """
     min_mag = min(bound_1, bound_2)
     max_mag = max(bound_1, bound_2)
-    lim_mag = vec.limit_mag(min_mag, max_mag).mag
+    lim_mag = vec.clamp_mag(min_mag, max_mag).mag
     assert (min_mag <= lim_mag <= max_mag or
             isclose(lim_mag, min_mag) or isclose(lim_mag, max_mag))
 
 @given(normals())
-def test_limit_mag_negative(vec):
-    """ Negative magnitude limits should raise a ValueError """
+def test_clamp_mag_negative(vec):
+    """ Negative magnitude clamp bounds should raise a ValueError """
     with raises(ValueError):
-        vec.limit_mag(-2, -1)
+        vec.clamp_mag(-2, -1)
 
 @given(normals())
-def test_limit_mag_wrong_order(vec):
+def test_clamp_mag_wrong_order(vec):
     """ A ValueError should be raised if min_mag > max_mag """
     with raises(ValueError):
-        vec.limit_mag(2, 1)
+        vec.clamp_mag(2, 1)
 
 @given(normals())
 def test_normal_normalize(normal):
@@ -222,16 +222,21 @@ def test_reflect_mag(vec, normal):
 @given(st.lists(vectors()))
 def test_cross_orthogonality(vecs):
     """ The cross product should be orthogonal to its operands """
-    ortho = V.cross(*vecs).limit_mag(1)
+    ortho = V.cross(*vecs).clamp_mag(1)
     for vec in vecs:
-        assert isclose(ortho @ vec.limit_mag(1), 0)
+        assert isclose(ortho @ vec.clamp_mag(1), 0)
 
+# TODO: maybe it would be better to test ClassyMethod directly rather
+# than cross.
 @given(vectors(), vectors())
 def test_classy_cross_works(vec1, vec2):
     """
     The cross product method should act like any other method
     We want to test this for cross because .cross() is a ClassyMethod.
-    All other methods are assumed to work properly.
+
+    Since I wrote this test, I also made .dot() a ClassyMethod, but I'm
+    just going to assume that it (and of course all the other normal
+    methods) work correctly.
     """
     assert vec1.cross(vec2) == V.cross(vec1, vec2)
 
@@ -282,17 +287,17 @@ def test_not_equal_to_iter(vec):
     """ Vectors should not be equal to their corresponding iterator """
     assert vec != iter(vec)
 
-@given(vectors(), st.integers(max_value=100))
-def test_pad_iter(vec, n):
-    """ pad_iter should yield all data needed to recreate the vector """
-    assert vec.from_iterable(vec.pad_iter(n)) == vec
+# @given(vectors(), st.integers(max_value=100))
+# def test_pad_iter(vec, n):
+#     """ pad_iter should yield all data needed to recreate the vector """
+#     assert vec.from_iterable(vec.pad_iter(n)) == vec
 
-@given(vectors(), st.integers(max_value=100))
-def test_pad_iter_length(vec, n):
-    """ pad_iter should yield at least as many values as the padding """
-    assert len(list(vec.pad_iter(n))) >= n
+# @given(vectors(), st.integers(max_value=100))
+# def test_pad_iter_length(vec, n):
+#     """ pad_iter should yield at least as many values as the padding """
+#     assert len(list(vec.pad_iter(n))) >= n
 
-@given(vectors())
-def test_pad_iter_0(vec):
-    """ vec.pad_iter(0) should be equivalent to iter(vec) """
-    assert list(vec.pad_iter(0)) == list(vec)
+# @given(vectors())
+# def test_pad_iter_0(vec):
+#     """ vec.pad_iter(0) should be equivalent to iter(vec) """
+#     assert list(vec.pad_iter(0)) == list(vec)
