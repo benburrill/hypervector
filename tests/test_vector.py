@@ -7,13 +7,14 @@ def test_identity_equality(vec):
 
 @given(vectors())
 def test_hash_equality(vec):
-    """ Separate but equal vectors should have equal hashes """
+    """ Equal vectors should have equal hashes """
     new = type(vec)(vec)
     # It would be valid for Vector(vec) to just return vec if I somehow
     # wanted it to in the future, but it would break this test.
     if new is vec:
-        raise RuntimeError("Test unable to run: must have two separate "
-                           "but equal vectors")
+        raise RuntimeError("Unable to run test: must have two distinct "
+                           "vectors of the same dimension and with "
+                           "equal components")
     assert vec == new
     assert hash(vec) == hash(new)
 
@@ -84,7 +85,7 @@ def test_mult_reciprocal(vec, divisor):
 def test_floor_division(vec, divisor):
     """ The // operator should behave like the / operator floored """
     try:
-        floored_division = V.vectorize(math.floor)(vec / divisor)
+        floored_division = type(vec).vectorize(math.floor)(vec / divisor)
     except ZeroDivisionError:
         with raises(ZeroDivisionError):
             vec // divisor
@@ -101,22 +102,24 @@ def test_repr(vec):
 @given(vectors())
 def test_str(vec):
     """ str(vec) should be a human-readable string """
-    # I will make no other assertions about the format
-    assert isinstance(str(vec), str)
+    # I will make no assertions about the format other than it should be
+    # different from the repr (implying greater readability than Python
+    # code).
+    assert str(vec) != repr(vec)
 
 @given(vectors())
 def test_angle_between_zero(vec):
     """ The angle between any vector and the 0-vector should be 0 """
-    assert vec.angle_between(V()) == 0
-    assert V().angle_between(vec) == 0
+    assert vec.angle_between(type(vec).zero) == 0
+    assert type(vec).zero.angle_between(vec) == 0
 
 @given(vectors())
 def test_strict_angle_between_zero(vec):
     """ If strict is passed, ZeroDivisionError should be raised """
     with raises(ZeroDivisionError):
-        vec.angle_between(V(), strict=True)
+        vec.angle_between(type(vec).zero, strict=True)
     with raises(ZeroDivisionError):
-        V().angle_between(vec, strict=True)
+        type(vec).zero.angle_between(vec, strict=True)
 
 @given(vectors())
 def test_mag_aliases(vec):
@@ -182,7 +185,7 @@ def test_dot_matmul(vec_1, vec_2):
 @given(vectors(), normals())
 def test_project_parallel(vec, onto):
     """ vec.project(onto) should be parallel to onto """
-    theta = V.angle_between(onto, vec.project(onto))
+    theta = onto.angle_between(vec.project(onto))
     assert isclose(math.sin(theta), 0)
 
 @given(vectors(), normals())
@@ -200,9 +203,9 @@ def test_project_dist(vec, onto):
     Vector.dist should demonstrate the properties of this triangle.
     """
     projection = vec.project(onto)
-    a = V.dist(projection, onto)
-    b = V.dist(vec, projection)
-    c = V.dist(vec, onto)
+    a = projection.dist(onto)
+    b = vec.dist(projection)
+    c = vec.dist(onto)
     assert isclose(a ** 2 + b ** 2, c ** 2)
 
 @given(vectors(), normals())
@@ -210,8 +213,8 @@ def test_reflect_direction(vec, normal):
     """ The direction of a reflected vector should be reflected """
     reflected = vec.reflect(normal)
     # Use sin to allow reflections from behind
-    assert isclose(math.sin(V.angle_between(vec, normal)),
-                   math.sin(V.angle_between(reflected, normal)))
+    assert isclose(math.sin(vec.angle_between(normal)),
+                   math.sin(reflected.angle_between(normal)))
 
 @given(vectors(), normals())
 def test_reflect_mag(vec, normal):
@@ -240,6 +243,9 @@ def test_classy_cross_works(vec1, vec2):
     """
     assert vec1.cross(vec2) == V.cross(vec1, vec2)
 
+# TODO: we need to test the cross product for vector types other than
+# infinite_vectors
+
 @given(vectors())
 def test_bool(vec):
     """
@@ -251,6 +257,7 @@ def test_bool(vec):
     else:
         assert vec
 
+# Limit size of vectors so this test doesn't take too long
 @given(vectors(max_size=5))
 def test_round(vec):
     """
@@ -263,7 +270,7 @@ def test_round(vec):
     import itertools
     orderings = itertools.product([math.floor, math.ceil],
                                   repeat=len(list(vec)))
-    closest = min((V(func(val) for func, val in zip(funcs, vec))
+    closest = min((type(vec)(func(val) for func, val in zip(funcs, vec))
                    for funcs in orderings),
                   key=vec.dist)
     assert (closest == round(vec) or
