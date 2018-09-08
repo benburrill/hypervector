@@ -8,7 +8,7 @@ def test_identity_equality(vec):
 @given(vectors())
 def test_hash_equality(vec):
     """ Separate but equal vectors should have equal hashes """
-    new = V(vec)
+    new = type(vec)(vec)
     # It would be valid for Vector(vec) to just return vec if I somehow
     # wanted it to in the future, but it would break this test.
     if new is vec:
@@ -25,7 +25,7 @@ def test_pos_identity(vec):
 @given(vectors())
 def test_additive_identity(vec):
     """ The 0-vector should be an additive identity for vectors """
-    assert vec + V() == vec
+    assert vec + type(vec).zero == vec
 
 @given(vectors())
 def test_multiplicative_identity(vec):
@@ -219,7 +219,7 @@ def test_reflect_mag(vec, normal):
     reflected = vec.reflect(normal)
     assert isclose(vec.mag, reflected.mag)
 
-@given(st.lists(vectors()))
+@given(st.lists(infinite_vectors()))
 def test_cross_orthogonality(vecs):
     """ The cross product should be orthogonal to its operands """
     ortho = V.cross(*vecs).clamp_mag(1)
@@ -228,7 +228,7 @@ def test_cross_orthogonality(vecs):
 
 # TODO: maybe it would be better to test ClassyMethod directly rather
 # than cross.
-@given(vectors(), vectors())
+@given(infinite_vectors(), infinite_vectors())
 def test_classy_cross_works(vec1, vec2):
     """
     The cross product method should act like any other method

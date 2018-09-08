@@ -34,7 +34,7 @@ def test_get_out_of_list_bounds(list):
     assert vec[len(list)] == 0
     assert vec[len(list) + 1114111] == 0
 
-@given(vectors())
+@given(infinite_vectors())
 def test_get_neg_index(vec):
     """ Negative vector indices should be 0 """
     assert vec[-1] == 0
@@ -49,7 +49,7 @@ def test_get_slice(list, start, stop, step):
     for idx, val in enumerate(list[start:stop:step]):
         assert vec[idx] == val
 
-@given(vectors())
+@given(infinite_vectors())
 def test_get_neg_slices(vec):
     """ Slices with negatives should behave appropriately """
     assert vec[-3::1] == V()
@@ -57,14 +57,14 @@ def test_get_neg_slices(vec):
     with raises(ValueError):
         vec[:2:-1]
 
-@given(vectors(), st.lists(st.integers()))
+@given(infinite_vectors(), st.lists(st.integers()))
 def test_get_multiple(vec, selection):
     """ Iterable indices should be used to select components """
     selected = vec[selection]
     for idx, requested in enumerate(selection):
         assert selected[idx] == vec[requested]
 
-@given(vectors())
+@given(vectors(min_size=4))
 def test_get_component_attr(vec):
     """ Vector instances should have component attributes """
     assert vec[0] == vec.x == vec.i == vec.r
@@ -72,7 +72,7 @@ def test_get_component_attr(vec):
     assert vec[2] == vec.z == vec.k == vec.b
     assert vec[3] == vec.w          == vec.a
 
-@given(vectors())
+@given(vectors(min_size=3))
 def test_get_swizzle_attr(vec):
     """ Vector instance-attributes should implement swizzling """
     assert vec[2, 0, 1, 2] == vec.zxyz == vec.kijk == vec.brgb
@@ -83,10 +83,10 @@ def test_no_swizzle_mixing():
     with raises(AttributeError):
         vec.xjb
 
-@given(vectors())
+@given(vectors(min_size=3))
 def test_underscore_swizzling(vec):
     """ Underscores should be usable as zeros in swizzling """
-    correct = V(0, 0, vec[2], vec[1], 0, vec[0], vec[2], 0, 0)
+    correct = V[9](0, 0, vec[2], vec[1], 0, vec[0], vec[2], 0, 0)
     assert correct == vec.__zy_xz__ == vec.__kj_ik__ == vec.__bg_rb__
 
 def test_no_individual_underscore():

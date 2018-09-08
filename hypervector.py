@@ -481,7 +481,7 @@ class Vector(metaclass=VectorType):
         # The first two conditions SHOULD always be equivalent to
         # type(self) == type(other), but this is more flexible to silly
         # metaclass bugs.
-        return (type(self)._root == type(other)._root and
+        return (isinstance(other, type(self)._root) and
                 self.dim == other.dim and
                 all(_zmap(operator.eq, self, other)))
 

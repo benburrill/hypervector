@@ -1,13 +1,19 @@
 from .common import *
 
-def test_construct_zero():
+@given(vector_types())
+def test_zero_property(cls):
+    """ Vector.zero should be the 0-vector """
+    assert not cls.zero
+
+@given(vector_types())
+def test_construct_zero(cls):
     """ Vector() should be the 0-vector """
-    assert not V()
+    assert cls() == cls.zero
 
 @given(vectors())
 def test_construction_identity(vec):
     """ Vector(vec) should be the identity function """
-    assert V(vec) == vec
+    assert type(vec)(vec) == vec
 
 @given(st.lists(numbers()))
 def test_iterable_construction(list):
@@ -29,7 +35,7 @@ def test_add_final_vector(list_of_lists, vec):
     """ A final vector should combine with previous iterables """
     assert V(*list_of_lists, vec) == V(*list_of_lists, list(vec))
 
-@given(st.lists(numbers()), vectors(), st.lists(numbers()))
+@given(st.lists(numbers()), infinite_vectors(), st.lists(numbers()))
 def test_no_append_to_vector(begin, vec, end):
     """ It should be invalid to append further iterables to a vector """
     with raises(TypeError):
@@ -56,12 +62,13 @@ def test_from_mapping(mapping):
     for key, value in mapping.items():
         assert vec[key] == value
 
-def test_no_negative_index_mapping():
-    """ Negative component maps should be invalid """
+@given(vector_types())
+def test_no_negative_index_mapping(cls):
+    """ Negative component maps should always be invalid """
     with raises(ValueError):
-        V.from_mapping({-1: 1})
+        cls.from_mapping({-1: 1})
 
-@given(vectors(), _mappings)
+@given(infinite_vectors(), _mappings)
 def test_from_mapping_extend(vec, mapping):
     """ from_mapping should mask over the base argument """
     extended = V.from_mapping(mapping, base=vec)
@@ -107,7 +114,17 @@ def test_from_polar_mag(mag, theta):
     """ from_polar should return a vector with the given mag """
     assert isclose(V.from_polar(mag, theta).mag, mag)
 
-@given(vectors(max_size=2, average_size=1))
+# TODO: should this restriction be lifted?
+@given(finite_vectors(max_size=1))
+def test_bad_heading2_projection(vec):
+    """
+    vec.heading2 should be invalid for 0 or 1 dimensional vectors since
+    they cannot be projected in the xy-plane.
+    """
+    with raises(AttributeError):
+        vec.heading2
+
+@given(vectors(min_size=2, max_size=2))
 def test_from_polar_heading2(vec):
     """ vec.heading2 should be the inverse of Vector.from_polar """
     assert isclose(vec, V.from_polar(vec.mag, vec.heading2))
