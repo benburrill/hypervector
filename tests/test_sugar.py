@@ -1,62 +1,109 @@
 from .common import *
 
-def test_unit_vecs():
+@given(vector_types(min_size=4))
+def test_unit_vecs(cls):
     """ The Vector class should have unit vector attributes """
-    assert V(1, 0, 0) == V.x == V.i == V.r
-    assert V(0, 1, 0) == V.y == V.j == V.g
-    assert V(0, 0, 1) == V.z == V.k == V.b
-    assert V(0, 0, 0, 1) == V.w == V.a
+    assert cls(1, 0, 0) == cls.x == cls.i == cls.r
+    assert cls(0, 1, 0) == cls.y == cls.j == cls.g
+    assert cls(0, 0, 1) == cls.z == cls.k == cls.b
+    assert cls(0, 0, 0, 1) == cls.w == cls.a
 
-def test_no_class_swizzling():
+@given(finite_vector_types(max_size=3))
+def test_bad_unit_vecs(cls):
+    with raises(AttributeError):
+        cls.w
+
+    with raises(AttributeError):
+        cls.a
+
+@given(vector_types())
+def test_no_class_swizzling(cls):
     """ The Vector class-attributes should NOT implement swizzling """
     with raises(AttributeError):
-        V.xyz
+        cls.xyz
 
-def test_bad_class_attr():
+@given(vector_types())
+def test_bad_class_attr(cls):
     """
     Test that getting invalid unit vectors results in an AttributeError
     Also helps to ensure that the underscore is not used in a name group
     """
     with raises(AttributeError):
-        V._
+        cls._
 
-@given(st.lists(numbers()))
+@given(num_lists())
 def test_get_index(list):
     """ Vectors should be subscript-able in a way that mimics lists """
-    vec = V(list)
+    inf_vec = V(list)
+    fin_vec = V[len(list)](list)
+
     for idx, val in enumerate(list):
-        assert vec[idx] == val
+        assert inf_vec[idx] == fin_vec[idx] == val
 
-@given(st.lists(numbers()))
-def test_get_out_of_list_bounds(list):
-    """ Unlike lists, vectors should have infinite components of 0 """
-    vec = V(list)
-    assert vec[len(list)] == 0
-    assert vec[len(list) + 1114111] == 0
+@given(num_lists(), st.integers(min_value=0))
+def test_get_out_of_list_bounds(list, how_far):
+    """
+    Infinite vectors should have infinite 0 components, but finite
+    vectors are more like lists
+    """
+    inf_vec = V(list)
+    fin_vec = V[len(list)](list)
 
-@given(infinite_vectors())
-def test_get_neg_index(vec):
-    """ Negative vector indices should be 0 """
-    assert vec[-1] == 0
+    assert inf_vec[len(list) + how_far] == 0
 
-@given(st.lists(numbers()), st.integers(min_value=0),
-                            st.integers(min_value=0),
-                            st.integers(min_value=1))
-def test_get_slice(list, start, stop, step):
-    """ Vectors should be slice-able in a way that mimics lists"""
-    vec = V(list)[start:stop:step]
-    assert isinstance(vec, V)
-    for idx, val in enumerate(list[start:stop:step]):
-        assert vec[idx] == val
+    with raises(IndexError):
+        fin_vec[len(list) + how_far]
 
+@given(infinite_vectors(), st.integers(max_value=-1))
+def test_get_infinite_vector_neg_index(vec, idx):
+    """
+    Looking up any negative index on an infinite vector should yield 0
+    """
+    assert vec[idx] == 0
+
+@given(num_lists(), st.integers(max_value=-1))
+def test_get_finite_vector_neg_index(list, idx):
+    """ Negative indices on finite vectors should work like on lists """
+    fin_vec = V[len(list)](list)
+
+    try:
+        val = list[idx]
+    except IndexError:
+        with raises(IndexError):
+            fin_vec[idx]
+    else:
+        assert fin_vec[idx] == val
+
+@given(num_lists(), st.integers(min_value=0),
+                    st.integers(min_value=0),
+                    st.integers(min_value=1))
+def test_get_pos_slices(list, start, stop, step):
+    """
+    Vectors should be slice-able in a way that mimics lists for positive
+    slices.
+    """
+    inf_vslice = V(list)[start:stop:step]
+    fin_vslice = V[len(list)](list)[start:stop:step]
+    lslice = list[start:stop:step]
+    assert isinstance(inf_vslice, V[len(lslice)])
+    assert isinstance(fin_vslice, V[len(lslice)])
+    for idx, val in enumerate(lslice):
+        assert inf_vslice[idx] == fin_vslice[idx] == val
+
+# TODO: test negative slices for finite vectors
 @given(infinite_vectors())
 def test_get_neg_slices(vec):
-    """ Slices with negatives should behave appropriately """
+    """
+    Slices with negatives on infinite vectors should have special
+    behavior.
+    """
+
     assert vec[-3::1] == V()
     assert vec[1:-2] == vec[1:]
     with raises(ValueError):
         vec[:2:-1]
 
+# TODO: finite
 @given(infinite_vectors(), st.lists(st.integers()))
 def test_get_multiple(vec, selection):
     """ Iterable indices should be used to select components """
@@ -64,7 +111,7 @@ def test_get_multiple(vec, selection):
     for idx, requested in enumerate(selection):
         assert selected[idx] == vec[requested]
 
-@given(vectors(min_size=4))
+@given(st.one_of(infinite_vectors(), finite_vectors(min_size=4)))
 def test_get_component_attr(vec):
     """ Vector instances should have component attributes """
     assert vec[0] == vec.x == vec.i == vec.r
@@ -72,14 +119,22 @@ def test_get_component_attr(vec):
     assert vec[2] == vec.z == vec.k == vec.b
     assert vec[3] == vec.w          == vec.a
 
+@given(finite_vectors(max_size=3))
+def test_finite_vectors_get_bad_component_attr(vec):
+    with raises(AttributeError):
+        vec.w
+
+    with raises(AttributeError):
+        vec.a
+
 @given(vectors(min_size=3))
 def test_get_swizzle_attr(vec):
     """ Vector instance-attributes should implement swizzling """
     assert vec[2, 0, 1, 2] == vec.zxyz == vec.kijk == vec.brgb
 
-def test_no_swizzle_mixing():
+@given(vectors())
+def test_no_swizzle_mixing(vec):
     """ Components from different name groups should not swizzle """
-    vec = V(1, 2, 3)
     with raises(AttributeError):
         vec.xjb
 
@@ -89,9 +144,9 @@ def test_underscore_swizzling(vec):
     correct = V[9](0, 0, vec[2], vec[1], 0, vec[0], vec[2], 0, 0)
     assert correct == vec.__zy_xz__ == vec.__kj_ik__ == vec.__bg_rb__
 
-def test_no_individual_underscore():
+@given(vectors())
+def test_no_individual_underscore(vec):
     """ The underscore should not work alone """
-    vec = V(1, 2, 3)
     with raises(AttributeError):
         vec._
 
@@ -106,19 +161,3 @@ def test_immutability(vec):
         vec.x = 42
     with raises(TypeError):
         del vec.x
-
-# @given(vectors(), st.integers(min_value=0, max_value=100))
-# def test_left_shift(vec, shift):
-#     """ The << operator should shift components over to the left """
-#     assert vec << shift == vec[shift:]
-
-# @given(vectors(), st.integers(min_value=0, max_value=100))
-# def test_right_shift(vec, shift):
-#     """ The >> operator should shift components over to the right """
-#     assert vec >> shift == V(shift * [0], vec)
-
-# @given(vectors(), st.integers(min_value=0, max_value=100))
-# def test_neg_shift(vec, shift):
-#     """ Negative shifts should do the inverse shift operation """
-#     assert vec << shift == vec >> -shift
-#     assert vec >> shift == vec << -shift

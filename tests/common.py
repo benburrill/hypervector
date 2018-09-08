@@ -73,18 +73,18 @@ def normals(*args, **kwargs):
         infinite_normals(*args, **kwargs)
     )
 
-def vector_types(**kwargs):
-    return st.one_of(
-        st.just(V),
+def finite_vector_types(**kwargs):
+    # By using num_lists here, we make sure the Hypothesis is
+    # comfortable generating the amount of data required to fill a
+    # vector of the given size, and also reuse the default
+    # parameters all other vector strategies use.
 
-        # By using num_lists here, we make sure the Hypothesis is
-        # comfortable generating the amount of data required to fill a
-        # vector of the given size, and also reuse the default
-        # parameters all other vector strategies use.
-        num_lists(**kwargs).map(
-            lambda l: V[len(l)]
-        )
+    return num_lists(**kwargs).map(
+        lambda l: V[len(l)]
     )
+
+def vector_types(**kwargs):
+    return st.one_of(st.just(V), finite_vector_types(**kwargs))
 
 def isclose(a, b, *, rel_tol=1e-9, abs_tol=1e-7):
     """ math.isclose with support for vectors and a bigger abs_tol """
