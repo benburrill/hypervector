@@ -1,4 +1,5 @@
 from .common import *
+import itertools
 
 @given(vectors())
 def test_identity_equality(vec):
@@ -286,7 +287,6 @@ def test_round(vec):
 
     This is a silly, largely pointless test.
     """
-    import itertools
     orderings = itertools.product([math.floor, math.ceil],
                                   repeat=len(list(vec)))
     closest = min((type(vec)(func(val) for func, val in zip(funcs, vec))
@@ -313,17 +313,16 @@ def test_not_equal_to_iter(vec):
     """ Vectors should not be equal to their corresponding iterator """
     assert vec != iter(vec)
 
-# @given(vectors(), st.integers(max_value=100))
-# def test_pad_iter(vec, n):
-#     """ pad_iter should yield all data needed to recreate the vector """
-#     assert vec.from_iterable(vec.pad_iter(n)) == vec
+@given(finite_vectors())
+def test_finite_iter_all(fin_vec):
+    """ iter_all should be equivalent to iter for finite vectors """
+    assert list(fin_vec.iter_all()) == list(iter(fin_vec))
 
-# @given(vectors(), st.integers(max_value=100))
-# def test_pad_iter_length(vec, n):
-#     """ pad_iter should yield at least as many values as the padding """
-#     assert len(list(vec.pad_iter(n))) >= n
-
-# @given(vectors())
-# def test_pad_iter_0(vec):
-#     """ vec.pad_iter(0) should be equivalent to iter(vec) """
-#     assert list(vec.pad_iter(0)) == list(vec)
+@given(num_lists())
+def test_infinite_iter_all(prefix):
+    """ iter_all should be infinite for infinite vectors """
+    inf_vec = V(prefix)
+    iterator = inf_vec.iter_all()
+    assert list(itertools.islice(iterator, len(prefix))) == prefix
+    assert (list(itertools.islice(iterator, SIDEWAYS_INFINITY)) == 
+            [0] * SIDEWAYS_INFINITY)

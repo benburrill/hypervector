@@ -7,6 +7,9 @@ from hypothesis import given
 from pytest import raises
 
 
+SIDEWAYS_INFINITY = 8
+
+
 def numbers(*, min_value=-1e9, max_value=1e9):
     return st.one_of(
         st.integers(min_value=min_value, max_value=max_value),
