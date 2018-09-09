@@ -338,7 +338,7 @@ class Vector(metaclass=VectorType):
 
         return math.atan2(self.y, self.x)
 
-    def angle_between(self, other, *, strict=False):
+    def angle(self, other, *, strict=False):
         """
         Calculates the angle between two vectors.
 
@@ -378,9 +378,10 @@ class Vector(metaclass=VectorType):
         """ Distance between two coordinate vectors """
         return abs(self - other)
 
-    def normalize(self):
+    @property
+    def unit(self):
         """
-        Return a scaled vector with magnitude 1
+        Return a scaled vector with magnitude 1 in the direction of self
         Equivalent to self.with_mag(1)
         """
         return self / abs(self)
@@ -389,8 +390,7 @@ class Vector(metaclass=VectorType):
         """ Return a scaled vector with magnitude ``mag`` """
         if mag:
             return self * (mag / abs(self))
-        # Return a zero vector if we can to avoid needlessly dividing by
-        # zero.
+        # Return a zero vector if we can to avoid needlessly dividing.
         return type(self).zero
 
     def clamp_mag(self, min_mag, max_mag=None):
@@ -466,7 +466,7 @@ class Vector(metaclass=VectorType):
 
     def project(self, onto):
         """ Project a vector onto the line defined by ``onto`` """
-        return onto.with_mag(self.dot(onto.normalize()))
+        return onto.with_mag(self.dot(onto.unit))
 
     def reflect(self, normal):
         """ Reflect a vector across a normal """

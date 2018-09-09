@@ -128,18 +128,18 @@ def test_str(vec):
     assert str(vec) != repr(vec)
 
 @given(vectors())
-def test_angle_between_zero(vec):
+def test_angle_between_vec_and_origin(vec):
     """ The angle between any vector and the 0-vector should be 0 """
-    assert vec.angle_between(type(vec).zero) == 0
-    assert type(vec).zero.angle_between(vec) == 0
+    assert vec.angle(type(vec).zero) == 0
+    assert type(vec).zero.angle(vec) == 0
 
 @given(vectors())
-def test_strict_angle_between_zero(vec):
+def test_strict_angle_between_vec_and_origin(vec):
     """ If strict is passed, ZeroDivisionError should be raised """
     with raises(ZeroDivisionError):
-        vec.angle_between(type(vec).zero, strict=True)
+        vec.angle(type(vec).zero, strict=True)
     with raises(ZeroDivisionError):
-        type(vec).zero.angle_between(vec, strict=True)
+        type(vec).zero.angle(vec, strict=True)
 
 @given(vectors())
 def test_mag_aliases(vec):
@@ -161,15 +161,15 @@ def test_with_mag(vec, mag):
     assert isclose(vec.with_mag(mag).mag, mag)
 
 @given(vectors())
-def test_normalize_with_mag(vec):
-    """ vec.normalize() and vec.with_mag(1) should behave the same """
+def test_unit_vs_with_mag(vec):
+    """ vec.unit and vec.with_mag(1) should behave the same """
     try:
         mag_1 = vec.with_mag(1)
     except ZeroDivisionError:
         with raises(ZeroDivisionError):
-            vec.normalize()
+            vec.unit
     else:
-        assert isclose(mag_1, vec.normalize())
+        assert isclose(mag_1, vec.unit)
 
 @given(normals(), numbers(min_value=0), numbers(min_value=0))
 def test_clamp_mag(vec, bound_1, bound_2):
@@ -193,9 +193,9 @@ def test_clamp_mag_wrong_order(vec):
         vec.clamp_mag(2, 1)
 
 @given(normals())
-def test_normal_normalize(normal):
-    """ normal.normalize() should be the identity function """
-    assert isclose(normal, normal.normalize())
+def test_normal_unit_vec(normal):
+    """ normal.unit should be the identity function """
+    assert isclose(normal, normal.unit)
 
 @given(vectors(), vectors())
 def test_dot_matmul(vec_1, vec_2):
@@ -205,7 +205,7 @@ def test_dot_matmul(vec_1, vec_2):
 @given(vectors(), normals())
 def test_project_parallel(vec, onto):
     """ vec.project(onto) should be parallel to onto """
-    theta = onto.angle_between(vec.project(onto))
+    theta = onto.angle(vec.project(onto))
     assert isclose(math.sin(theta), 0)
 
 @given(vectors(), normals())
@@ -233,8 +233,8 @@ def test_reflect_direction(vec, normal):
     """ The direction of a reflected vector should be reflected """
     reflected = vec.reflect(normal)
     # Use sin to allow reflections from behind
-    assert isclose(math.sin(vec.angle_between(normal)),
-                   math.sin(reflected.angle_between(normal)))
+    assert isclose(math.sin(vec.angle(normal)),
+                   math.sin(reflected.angle(normal)))
 
 @given(vectors(), normals())
 def test_reflect_mag(vec, normal):
