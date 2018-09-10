@@ -82,6 +82,17 @@ def finite_vector_types(**kwargs):
 def vector_types(**kwargs):
     return st.one_of(st.just(V), finite_vector_types(**kwargs))
 
+def component_mappings(dim, *, values=numbers()):
+    if dim is None:
+        dim = 100
+
+    if dim == 0:
+        return st.just({})
+
+    return st.dictionaries(
+        st.integers(min_value=0, max_value=dim - 1), values
+    )
+
 def isclose(a, b, *, rel_tol=1e-9, abs_tol=1e-7):
     """ math.isclose with support for vectors and a bigger abs_tol """
 

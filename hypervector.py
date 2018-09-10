@@ -257,7 +257,7 @@ class Vector(metaclass=VectorType):
         """
 
         mapping = dict(mapping)
-        dims = max(mapping, default=0) + 1
+        dims = max(mapping, default=-1) + 1
         base = list(base)
         data = base + [0] * (dims - len(base))
 

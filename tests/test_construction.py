@@ -15,50 +15,145 @@ def test_construction_identity(vec):
     """ Vector(vec) should be the identity function """
     assert type(vec)(vec) == vec
 
-@given(st.lists(numbers()))
-def test_iterable_construction(list):
-    """ Vector(iterable) should be equivalent to from_iterable """
-    assert V(list) == V.from_iterable(list)
+@given(st.data())
+def test_from_iterable_accepts_iterators_and_other_iterables(data):
+    """
+    from_iterable should take arbitrary iterables and return vector
+    with components from the iterable.
+    """
 
-@given(st.lists(st.lists(numbers())))
-def test_combine_iterables(list_of_lists):
-    """ Vector(*iterables) should combine iterables """
-    assert V(*list_of_lists) == V(sum(list_of_lists, []))
+    cls = data.draw(vector_types(), label="cls")
+    l = data.draw(num_lists(max_size=cls.dim), label="l")
 
-@given(st.lists(st.lists(numbers())), numbers())
-def test_combine_scalars(list_of_lists, scalar):
-    """ Scalar quantities should be merged along with the iterables """
-    assert V(*list_of_lists, scalar) == V(*(list_of_lists + [scalar]))
+    list_vec = cls.from_iterable(l)
+    iter_vec = cls.from_iterable(iter(l))
 
-@given(st.lists(st.lists(numbers())), vectors())
-def test_add_final_vector(list_of_lists, vec):
-    """ A final vector should combine with previous iterables """
-    assert V(*list_of_lists, vec) == V(*list_of_lists, list(vec))
-
-@given(st.lists(numbers()), infinite_vectors(), st.lists(numbers()))
-def test_no_append_to_vector(begin, vec, end):
-    """ It should be invalid to append further iterables to a vector """
-    with raises(TypeError):
-        V(begin, vec, end)
-
-@given(st.lists(numbers()))
-def test_from_iterable_using_iterator(list):
-    """ from_iterable take an arbitrary iterable and return a vector """
-    iterator = iter(list)
-    vec = V.from_iterable(iterator)
-    assert isinstance(vec, V)
     # Go through in reverse to ensure iterator is not misused
-    for idx, item in reversed(tuple(enumerate(list))):
-        assert vec[idx] == item
+    for idx, item in reversed(tuple(enumerate(l))):
+        assert list_vec[idx] == item
+        assert iter_vec[idx] == item
+
+@given(st.data())
+def test_iterable_construction(data):
+    """ Vector(iterable) should be equivalent to from_iterable """
+    cls = data.draw(vector_types(), label="cls")
+    l = data.draw(num_lists(max_size=cls.dim), label="l")
+
+    assert cls(l) == cls.from_iterable(l)
+
+@given(st.data())
+def test_finite_vector_pads_missing_components(data):
+    cls = data.draw(finite_vector_types(), label="cls")
+    l = data.draw(num_lists(max_size=cls.dim), label="l")
+
+    assert list(cls(l)) == l + [0] * (cls.dim - len(l))
+
+@given(st.data())
+def test_iterable_too_big_for_finite_vector(data):
+    """
+    If the iterable passed to a finite vector constructor (or
+    from_iterable) is too large, an error should be raised.
+    """
+
+    cls = data.draw(finite_vector_types(), label="cls")
+    l = data.draw(num_lists(min_size=cls.dim+1), label="l")
+
+    with raises(TypeError):
+        cls(l)
+
+    with raises(TypeError):
+        cls.from_iterable(l)
+
+@given(vector_types(), st.lists(st.one_of(numbers(),
+                                          num_lists(),
+                                          finite_vectors())))
+def test_combine_iterables_scalars(cls, arguments):
+    """
+    The vector constructor should combine any combination of finite
+    vectors, iterables, and scalars from positional arguments together.
+    """
+
+    combined = []
+    for arg in arguments:
+        if isinstance(arg, V):
+            # Explicit is better than implicit, especially in tests.
+            combined.extend(iter(arg))
+        elif isinstance(arg, list):
+            combined.extend(arg)
+        else:
+            combined.append(arg)
+
+    try:
+        from_combined = cls(combined)
+    except TypeError:
+        with raises(TypeError):
+            cls(*arguments)
+    else:
+        assert cls(*arguments) == from_combined
+
+@given(num_lists(), infinite_vectors())
+def test_final_inf_vec_in_inf_vec_constructor(begin, vec):
+    """
+    Infinite vectors can trail other arguments in the infinite
+    vector constructor.
+    """
+
+    assert V(*begin, vec) == V(*begin, list(vec))
+
+@given(finite_vector_types(), num_lists(), infinite_vectors())
+def test_no_infinite_vector_in_finite_constructor(cls, begin, inf_vec):
+    """
+    Infinite vectors cannot be passed to finite vector constructors
+    without setting truncate to True.
+    """
+    with raises(TypeError):
+        cls(*begin, inf_vec)
+
+@given(vector_types(), num_lists(), infinite_vectors(), num_lists(min_size=1))
+def test_no_append_to_infinite_vector(cls, begin, inf_vec, end):
+    """
+    It should be invalid to append further items after an infinite
+    vector in any vector type.
+    """
+
+    with raises(TypeError):
+        cls(*begin, inf_vec, *end)
+
+@given(vector_types(), num_lists())
+def test_truncate_truncates_iterable_as_needed(cls, l):
+    """
+    Truncate should truncate data to fit in the vector.
+    """
+
+    truncated = l[:cls.dim]
+    assert (cls(l, truncate=True) ==
+            cls(truncated, truncate=False) ==
+            cls(truncated))
+
+@given(vector_types(), num_lists(), infinite_vectors(), num_lists())
+def test_truncate_with_infinite_vector(cls, begin, inf_vec, end):
+    """
+    Data following a truncated infinite vector should never be expressed
+    in the vector.
+
+    Implied: truncate allows infinite vectors to be passed as arguments
+    to finite vector constructors.
+    """
+
+    assert (cls(*begin, inf_vec, *end, truncate=True) ==
+            cls(*begin, inf_vec, truncate=True))
 
 _mappings = st.dictionaries(
     st.integers(min_value=0, max_value=100), numbers()
 )
 
-@given(_mappings)
-def test_from_mapping(mapping):
+@given(st.data())
+def test_from_mapping(data):
     """ Mapped components should correspond to vector components """
-    vec = V.from_mapping(mapping)
+    cls = data.draw(vector_types(), label="cls")
+    mapping = data.draw(component_mappings(cls.dim), label="mapping")
+
+    vec = cls.from_mapping(mapping)
     for key, value in mapping.items():
         assert vec[key] == value
 
@@ -68,72 +163,70 @@ def test_no_negative_index_mapping(cls):
     with raises(ValueError):
         cls.from_mapping({-1: 1})
 
-@given(infinite_vectors(), _mappings)
-def test_from_mapping_extend(vec, mapping):
+@given(st.data())
+def test_from_mapping_extend(data):
     """ from_mapping should mask over the base argument """
-    extended = V.from_mapping(mapping, base=vec)
-    important = list(vec)
-    for idx in range(max(len(important), max(mapping, default=0) + 1)):
+    base_vec = data.draw(vectors(), label="base_vec")
+    cls = type(base_vec)
+    mapping = data.draw(component_mappings(cls.dim), label="mapping")
+
+    extended = cls.from_mapping(mapping, base=base_vec)
+    important = list(base_vec)
+    for idx in range(max(len(important), max(mapping, default=-1) + 1)):
         if idx in mapping:
             assert extended[idx] == mapping[idx]
         else:
-            assert extended[idx] == vec[idx]
+            assert extended[idx] == base_vec[idx]
 
-@given(numbers(), numbers(), numbers())
-def test_keyword_component_names(x, y, z):
+@given(vector_types(min_size=3), numbers(), numbers(), numbers())
+def test_keyword_component_names(cls, x, y, z):
     """ Component kwargs should correspond to component attributes """
-    assert V(x=x).x == x
-    assert V(y=y).y == y
-    assert V(z=z).z == z
-    assert V(x=x, y=y, z=z) == V(i=x, j=y, k=z) == V(r=x, g=y, b=z)
+    assert cls(x=x).x == x
+    assert cls(y=y).y == y
+    assert cls(z=z).z == z
+    assert cls(x=x, y=y, z=z) == cls(i=x, j=y, k=z) == cls(r=x, g=y, b=z)
 
-def test_no_keyword_mixing():
+@given(vector_types())
+def test_no_keyword_mixing(cls):
     """ Component kwargs should not allow mixing of name groups """
     with raises(TypeError):
-        V(x=42, j=10)
+        cls(x=42, j=10)
 
-@given(vectors(), st.dictionaries(st.sampled_from("xyzw"), numbers()))
+@given(vectors(min_size=4),
+       st.dictionaries(st.sampled_from("xyzw"), numbers()))
 def test_keyword_extend(vec, mapping):
     """ Component kwargs should extend a vector like from_mapping """
     index_map = {"xyzw".index(key): value
                  for key, value in mapping.items()}
-    assert V(vec, **mapping) == V.from_mapping(index_map, base=vec)
+    assert (type(vec)(vec, **mapping) ==
+            type(vec).from_mapping(index_map, base=vec))
 
-@given(vectors())
+@given(vectors(min_size=2))
 def test_from_spherical_heading(vec):
     """ vec.heading should be the inverse of Vector.from_spherical """
-    assert isclose(vec, V.from_spherical(vec.mag, vec.heading))
+    assert isclose(vec, type(vec).from_spherical(vec.mag, vec.heading))
 
 @given(numbers(min_value=0), vectors())
 def test_from_spherical_mag(mag, direction):
     """ from_spherical should return a vector with the given mag """
-    assert isclose(V.from_spherical(mag, direction).mag, mag)
+    cls = V if direction.dim is None else V[direction.dim + 1]
+    assert isclose(cls.from_spherical(mag, direction).mag, mag)
 
-@given(numbers(min_value=0), numbers())
-def test_from_polar_mag(mag, theta):
+@given(vector_types(min_size=2), numbers(min_value=0), numbers())
+def test_from_polar_mag(cls, mag, theta):
     """ from_polar should return a vector with the given mag """
-    assert isclose(V.from_polar(mag, theta).mag, mag)
-
-# TODO: should this restriction be lifted?
-@given(finite_vectors(max_size=1))
-def test_bad_heading2_projection(vec):
-    """
-    vec.heading2 should be invalid for 0 or 1 dimensional vectors since
-    they cannot be projected in the xy-plane.
-    """
-    with raises(AttributeError):
-        vec.heading2
+    assert isclose(cls.from_polar(mag, theta).mag, mag)
 
 @given(vectors(min_size=2, max_size=2))
 def test_from_polar_heading2(vec):
     """ vec.heading2 should be the inverse of Vector.from_polar """
-    assert isclose(vec, V.from_polar(vec.mag, vec.heading2))
+    assert isclose(vec, type(vec).from_polar(vec.mag, vec.heading2))
 
 @given(vectors())
 def test_vectorize(vec):
     """ Vector.vectorize should make a function component-wise """
-    vsin = V.vectorize(math.sin)
+    vsin = type(vec).vectorize(math.sin)
     sined = vsin(vec)
-    assert isinstance(sined, V)
+    assert isinstance(sined, type(vec))
     for idx, value in enumerate(vec):
         assert sined[idx] == math.sin(value)
