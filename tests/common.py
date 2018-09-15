@@ -3,7 +3,7 @@ import hypothesis.strategies as st
 import math
 
 # for tests
-from hypothesis import given
+from hypothesis import given, assume
 from pytest import raises
 
 

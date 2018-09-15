@@ -31,6 +31,15 @@ def test_bad_class_attr(cls):
     with raises(AttributeError):
         cls._
 
+@given(st.integers(min_value=0, max_value=100))
+def test_finite_vector_types(dim):
+    assert V[dim].dim == dim
+
+@given(st.integers(max_value=-1))
+def test_no_negative_dimensional_vectors(dim):
+    with raises(TypeError):
+        V[dim]
+
 @given(num_lists())
 def test_get_index(list):
     """ Vectors should be subscript-able in a way that mimics lists """

@@ -39,6 +39,11 @@ def test_commutative_addition(vec_1, vec_2):
     """ Vector addition should be commutative """
     assert vec_1 + vec_2 == vec_2 + vec_1
 
+@given(vectors(), numbers())
+def test_add_scalar_fails(vector, scalar):
+    with raises(TypeError):
+        vector + scalar
+
 @given(numbers(), vectors())
 def test_commutative_multiplication(scalar, vec):
     """ Vector scaling should be commutative """
@@ -48,6 +53,11 @@ def test_commutative_multiplication(scalar, vec):
 def test_commutative_dot(vec_1, vec_2):
     """ The dot product should be commutative """
     assert vec_1 @ vec_2 == vec_2 @ vec_1
+
+@given(vectors(), numbers())
+def test_dot_scalar_fails(vector, scalar):
+    with raises(TypeError):
+        vector @ scalar
 
 @given(numbers(), vectors(), vectors())
 def test_distributive(scalar, vec_1, vec_2):
@@ -242,12 +252,30 @@ def test_reflect_mag(vec, normal):
     reflected = vec.reflect(normal)
     assert isclose(vec.mag, reflected.mag)
 
-@given(st.lists(infinite_vectors()))
-def test_cross_orthogonality(vecs):
+@given(st.data())
+def test_cross_orthogonality(data):
     """ The cross product should be orthogonal to its operands """
-    ortho = V.cross(*vecs).clamp_mag(1)
+    cls = data.draw(vector_types(min_size=1), label="cls")
+    nvecs = cls.dim and cls.dim - 1
+    vecs = data.draw(
+        st.lists(vectors(), min_size=nvecs, max_size=nvecs),
+        label="vecs"
+    )
+
+    ortho = cls.cross(*vecs).clamp_mag(1)
     for vec in vecs:
         assert isclose(ortho @ vec.clamp_mag(1), 0)
+
+@given(finite_vector_types(), st.lists(vectors()))
+def test_finite_cross_must_have_n_minus_1_operands(cls, vecs):
+    assume(len(vecs) != cls.dim - 1)
+    with raises(TypeError):
+        cls.cross(*vecs)
+
+@given(infinite_vectors(), numbers())
+def test_cross_scalar_fails(vec, scalar):
+    with raises(TypeError):
+        vec.cross(scalar)
 
 # TODO: maybe it would be better to test ClassyMethod directly rather
 # than cross.
@@ -262,9 +290,6 @@ def test_classy_cross_works(vec1, vec2):
     methods) work correctly.
     """
     assert vec1.cross(vec2) == V.cross(vec1, vec2)
-
-# TODO: we need to test the cross product for vector types other than
-# infinite_vectors
 
 @given(vectors())
 def test_bool(vec):
@@ -318,10 +343,10 @@ def test_finite_iter_all(fin_vec):
     """ iter_all should be equivalent to iter for finite vectors """
     assert list(fin_vec.iter_all()) == list(iter(fin_vec))
 
-@given(num_lists())
-def test_infinite_iter_all(prefix):
+@given(infinite_vectors())
+def test_infinite_iter_all(inf_vec):
     """ iter_all should be infinite for infinite vectors """
-    inf_vec = V(prefix)
+    prefix = list(inf_vec)
     iterator = inf_vec.iter_all()
     assert list(itertools.islice(iterator, len(prefix))) == prefix
     assert (list(itertools.islice(iterator, SIDEWAYS_INFINITY)) == 
