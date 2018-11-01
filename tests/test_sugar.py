@@ -83,25 +83,40 @@ def test_get_finite_vector_neg_index(list, idx):
     else:
         assert fin_vec[idx] == val
 
-@given(num_lists(), st.integers(min_value=0),
-                    st.integers(min_value=0),
-                    st.integers(min_value=1))
-def test_get_pos_slices(list, start, stop, step):
+@given(finite_vectors(), st.integers(), st.integers(), st.integers())
+def test_finite_vecs_always_slice_like_lists(vec, start, stop, step):
+    """
+    Finite vectors should always slice like lists, even for negative
+    slices.
+    """
+    assume(step != 0)
+
+    vslice = vec[start:stop:step]
+    lslice = list(vec)[start:stop:step]
+    assert list(vslice) == lslice
+    assert isinstance(vslice, V[len(lslice)])
+
+@given(vectors())
+def test_slice_step_of_zero_raises_ValueError(vec):
+    """ Step size of 0 should raise ValueError """
+    with raises(ValueError):
+        vec[::0]
+
+@given(infinite_vectors(), st.integers(min_value=0),
+                           st.integers(min_value=0),
+                           st.integers(min_value=1))
+def test_infinite_vecs_pos_slice_like_lists(vec, start, stop, step):
     """
     Vectors should be slice-able in a way that mimics lists for positive
     slices.
     """
-    inf_vslice = V(list)[start:stop:step]
-    fin_vslice = V[len(list)](list)[start:stop:step]
-    lslice = list[start:stop:step]
-    assert isinstance(inf_vslice, V[len(lslice)])
-    assert isinstance(fin_vslice, V[len(lslice)])
-    for idx, val in enumerate(lslice):
-        assert inf_vslice[idx] == fin_vslice[idx] == val
+    vslice = vec[start:stop:step]
+    lslice = list(vec)[start:stop:step]
+    assert list(vslice) == lslice
+    assert isinstance(vslice, V[len(lslice)])
 
-# TODO: test negative slices for finite vectors
 @given(infinite_vectors())
-def test_get_neg_slices(vec):
+def test_infinite_vec_neg_slices(vec):
     """
     Slices with negatives on infinite vectors should have special
     behavior.
