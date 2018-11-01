@@ -2,31 +2,45 @@ hypervector
 ===========
 | Simple, general, pure Python vectors
 |
-| ``hypervector.py`` defines an infinite-dimensional ``Vector`` type for all your vectoring needs.  Instances of ``Vector`` are immutable and come with a wide array of useful operations and features.
+| ``hypervector.py`` defines arbitrary-dimentional vector types for all your vectoring needs.  The vectors are immutable and come with many useful and well-tested vector operations and features.
 |
 | ``hypervector`` is in the public domain.
 
 A few explanatory examples
 --------------------------
-Hello world
+Hello world, *NOW IN 3D!*
 
-.. code:: python
+.. code:: pycon
 
-    >>> from hypervector import Vector
-    >>> (Vector(1, 2, 1) + Vector(3, 0, 2)).xy
-    Vector(4, 2)
+    >>> from hypervector import Vector3
+    >>> (Vector3(1, 2, 1) + Vector3(3, 0, 2)).zxy
+    Vector3(3, 4, 2)
+
+Higher dimensions
+
+.. code:: pycon
+
+    >>> from hypervector import Vector, Vector2, Vector3
+    >>> Vector2 is Vector[2] and Vector3 is Vector[3]
+    True
+    >>> Vector[4](1, 2, 3, 4)
+    Vector[4](1, 2, 3, 4)
+    >>> Vector[5](1, 2, 3, 4)
+    Vector[5](1, 2, 3, 4, 0)
+    >>> Vector[10].zero
+    Vector[10](0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 King of infinite (vector) space
 
-.. code:: python
+.. code:: pycon
 
-    >>> vec = Vector(2, 4)
+    >>> vec = Vector(2, 4)  # Dimensionless vectors are "infinite"
     >>> (vec[0], vec[1], vec[2], vec[1114111])
     (2, 4, 0, 0)
 
 Cross-eyed
 
-.. code:: python
+.. code:: pycon
 
     >>> vec_1, vec_2 = Vector(1, 2, 3), Vector(3, 2, 1)
     >>> Vector.cross(vec_1, vec_2)
@@ -42,16 +56,6 @@ Cross-eyed
 Testing
 -------
 | ``hypervector`` uses `py.test`_ and `hypothesis`_, with `tox`_ as a test runner.
-|
-| The unit tests can be run with ``tox``.  If you run into any slow data generation errors, use
-| ``tox -- --hypothesis-profile=allow-slow`` instead.
-
-Why infinite dimensions?
-------------------------
-| Because generalizing things is fun and having infinite dimensions is somewhat easier and simpler than having an abstract Vector type with arbitrary (but finite) dimensions.
-|
-| It is worth noting that ``Vector`` plays a little fast and loose with the concept of infinite dimensions, as it has a concept of "relevant" dimensions which is exposed through iteration, string representations, and a few other places to a lesser extent.
-| Similarly, there is no way to have a ``Vector`` with infinite non-zero components.
 
 How fast is hypervector?
 ------------------------
@@ -59,14 +63,14 @@ How fast is hypervector?
 
 Alternatives
 ------------
-| There are many other libraries with similar features to ``hypervector``.  Some notable examples:
+| There are many other libraries with similar features to ``hypervector``.  Some notable examples I have used:
 
 * `numpy <http://www.numpy.org/>`_
-* `pyeuclid <https://pypi.python.org/pypi/euclid3>`_ |--| Has (among other things) ``Vector2`` and ``Vector3`` types.  Also has packages for *Python* 2 and *Python* 3.
+* `pyeuclid <https://pypi.python.org/pypi/euclid3>`_ |--| Has unrelated ``Vector2`` and ``Vector3`` classes.  Also has two separate packages for *Python* 2 and *Python* 3.
 
 Links
 -----
-| Get `hypervector from PyPi`_: ``pip install hypervector``
+| Get `hypervector from PyPI`_: ``pip install hypervector``
 | Report bugs and offer suggestions at the github `issues`_ page.
 
 .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. ..
