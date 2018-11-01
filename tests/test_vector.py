@@ -277,20 +277,6 @@ def test_cross_scalar_fails(vec, scalar):
     with raises(TypeError):
         vec.cross(scalar)
 
-# TODO: maybe it would be better to test ClassyMethod directly rather
-# than cross.
-@given(infinite_vectors(), infinite_vectors())
-def test_classy_cross_works(vec1, vec2):
-    """
-    The cross product method should act like any other method
-    We want to test this for cross because .cross() is a ClassyMethod.
-
-    Since I wrote this test, I also made .dot() a ClassyMethod, but I'm
-    just going to assume that it (and of course all the other normal
-    methods) work correctly.
-    """
-    assert vec1.cross(vec2) == V.cross(vec1, vec2)
-
 @given(vectors())
 def test_bool(vec):
     """

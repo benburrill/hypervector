@@ -170,3 +170,18 @@ def test_immutability(vec):
         vec.x = 42
     with raises(TypeError):
         del vec.x
+
+def test_classy_methods():
+    from hypervector import _ClassyMethod
+
+    class Dummy:
+        @_ClassyMethod
+        def get_args(cls, *args):
+            assert cls is Dummy
+            return list(args)
+
+    d = Dummy()
+    assert Dummy.get_args() == []
+    assert Dummy.get_args(1, 2, 3) == [1, 2, 3]
+    assert d.get_args() == [d]
+    assert d.get_args(1, 2, 3) == [d, 1, 2, 3]
