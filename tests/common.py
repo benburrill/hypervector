@@ -3,8 +3,11 @@ import hypothesis.strategies as st
 import math
 
 # for tests
-from hypothesis import given
+from hypothesis import given, assume
 from pytest import raises
+
+
+SIDEWAYS_INFINITY = 8
 
 
 def numbers(*, min_value=-1e9, max_value=1e9):
@@ -15,24 +18,79 @@ def numbers(*, min_value=-1e9, max_value=1e9):
         st.fractions(min_value=min_value, max_value=max_value)
     )
 
-def vectors(comp_types=numbers(), *, average_size=3, max_size=None):
-    return st.builds(
-        V.from_iterable,
-        st.lists(comp_types, average_size=average_size, 
-                 max_size=max_size)
+def num_lists(elements=numbers(), **kwargs):
+    return st.lists(elements, **kwargs)
+
+def finite_vectors(*args, **kwargs):
+    return num_lists(*args, **kwargs).map(
+        lambda l: V[len(l)].from_iterable(l)
     )
 
-# This would not give us an even distribution if the lists were evenly
-# distributed, but that doesn't really matter because they are not.
-def normals(*, average_size=3, max_size=None):
-    if average_size is not None:
-        average_size -= 1
+def infinite_vectors(*args, **kwargs):
+    return st.builds(
+        V.from_iterable,
+        num_lists(*args, **kwargs)
+    )
+
+def vectors(*args, **kwargs):
+    return st.one_of(
+        finite_vectors(*args, **kwargs),
+        infinite_vectors(*args, **kwargs)
+    )
+
+def _sphere_lists(*, min_size=1, max_size=None):
+    if min_size is not None:
+        min_size -= 1
     if max_size is not None:
         max_size -= 1
+
+    return st.lists(
+        st.floats(allow_nan=False, allow_infinity=False),
+        min_size=min_size, max_size=max_size
+    )
+
+# These normals strategies would not give us evenly distributed normals
+# if the lists strategy was evenly distributed, but since lists already
+# isn't, it doesn't really matter.
+def finite_normals(*args, **kwargs):
+    return _sphere_lists(*args, **kwargs).map(
+        lambda l: V[len(l) + 1].from_spherical(1, l)
+    )
+
+def infinite_normals(*args, **kwargs):
     return st.builds(
         V.from_spherical, st.just(1),
-        st.lists(st.floats(allow_nan=False, allow_infinity=False),
-                 average_size=average_size, max_size=max_size)
+        _sphere_lists(*args, **kwargs)
+    )
+
+def normals(*args, **kwargs):
+    return st.one_of(
+        finite_normals(*args, **kwargs),
+        infinite_normals(*args, **kwargs)
+    )
+
+def finite_vector_types(**kwargs):
+    # By using num_lists here, we make sure the Hypothesis is
+    # comfortable generating the amount of data required to fill a
+    # vector of the given size, and also reuse the default
+    # parameters all other vector strategies use.
+
+    return num_lists(**kwargs).map(
+        lambda l: V[len(l)]
+    )
+
+def vector_types(**kwargs):
+    return st.one_of(st.just(V), finite_vector_types(**kwargs))
+
+def component_mappings(dim, *, values=numbers()):
+    if dim is None:
+        dim = 100
+
+    if dim == 0:
+        return st.just({})
+
+    return st.dictionaries(
+        st.integers(min_value=0, max_value=dim - 1), values
     )
 
 def isclose(a, b, *, rel_tol=1e-9, abs_tol=1e-7):
@@ -49,6 +107,9 @@ def isclose(a, b, *, rel_tol=1e-9, abs_tol=1e-7):
     if a == b:
         return True
 
+    # TODO: wtf is this and why did I do it?  If they were close to
+    # zero, they might still be close.
+    ###################################################################
     # Deal with negative infinity.
     if a == -b:
         return False

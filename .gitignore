@@ -9,6 +9,7 @@
 
 # Testing and coverage
 /.cache/
+/.pytest_cache/
 /.hypothesis/
 /.tox/
 /htmlcov/

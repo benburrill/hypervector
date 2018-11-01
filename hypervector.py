@@ -8,7 +8,7 @@ __version__ = "0.0.1"
 __author__ = "Ben Burrill"
 __license__ = "Public Domain"
 
-__all__ = ["Vector"]
+__all__ = ["Vector", "Vector2", "Vector3"]
 
 
 import math
@@ -25,11 +25,22 @@ def _crush(iterable):
             yield item
 
 
-def _zmap(fn, *args):
-    return it.starmap(fn, it.zip_longest(*args, fillvalue=0))
+def _zmap(fn, *iterables):
+    return it.starmap(fn, it.zip_longest(*iterables, fillvalue=0))
 
 
-def _limit(val, min_val, max_val):
+def _zpad(iterable, *, to=None):
+    count = 0
+    for comp in iterable:
+        yield comp
+        count += 1
+    if to is None:
+        yield from it.repeat(0)
+    else:
+        yield from it.repeat(0, to - count)
+
+
+def _clamp(val, min_val, max_val):
     return min(max(val, min_val), max_val)
 
 
@@ -64,20 +75,58 @@ class VectorType(type):
     ``IndexError`` must be raised.
     """
 
-    def __new__(mcls, *args, **kwargs):
-        """ Validate the class members """
+    def __new__(mcls, name, bases, namespace, *, dim=None, _root=None):
+        """
+        Create a new Vector type, validating the class members
 
-        cls = super().__new__(mcls, *args, **kwargs)
+        Unless the keyword class argument ``dim`` is passed, the created
+        vector type will be dimensionless.  ``dim`` is not inherited.
+        """
+
+        cls = super().__new__(mcls, name, bases, namespace)
+
+        if None is not dim < 0:
+            raise TypeError("Dimension must be positive")
+        else:
+            cls.__dim = dim
+        
+        if _root is None:
+            cls._root = cls
+            cls.__derived = {cls.__dim: cls}
+        else:
+            cls._root = _root
 
         for name in dir(cls):
             try:
-                group = cls.get_name_group(name.replace("_", ""))
+                group = cls.get_name_group(name)
                 raise AttributeError(
                     f"Attribute conflict: collision between name group "
                     f"{group!r} and class member {name!r}"
                 )
             except IndexError: pass
         return cls
+
+    @property
+    def dim(cls):
+        return cls.__dim
+
+    @property
+    def zero(cls):
+        return cls()
+
+    def _make_dim(cls, name, dim):
+        try:
+            return cls._root.__derived[dim]
+        except KeyError:
+            derived = type(cls)(name, (cls._root,), {
+                "__slots__": []
+            }, dim=dim, _root=cls._root)
+
+            cls._root.__derived[dim] = derived
+            return derived
+            
+    def __getitem__(cls, dim):
+        return cls._make_dim(f"{cls._root.__name__}[{dim}]", dim)
 
     def __getattr__(cls, attr):
         """ Named unit vectors as attributes """
@@ -97,6 +146,10 @@ class Vector(metaclass=VectorType):
 
     __slots__ = ["__data", "__frozen"]
 
+    # TODO: Not sure I want Vector2().rg to work.  Some name groups only
+    # make sense for certain dimensions.  However, most ways I can think
+    # of to add such restrictions to the name_groups are either ugly or
+    # overcomplicated.
     name_groups = ["xyzw", "ijk", "rgba"]
 
     @classmethod
@@ -104,30 +157,47 @@ class Vector(metaclass=VectorType):
         """ Return the relevant name group string if one exists """
         names = set(names)
         for group in cls.name_groups:
+            group = group[:cls.dim]
             if names.issubset(set(group)):
                 return group
         raise IndexError(f"No matching name group for {names}")
 
-    def __new__(cls, *args, **masks):
+    def __new__(cls, *args, truncate=False, **masks):
         """
         Construct a vector
 
         Vector() is the zero vector.
 
-        Any combination of vectors, iterables, and scalar components can
-        be combined as positional arguments, but there may only be one
-        vector and it must be the last positional argument.
+        Vectors, iterables, and scalar components can be combined as
+        positional arguments.
+        
+        The truncate argument, when True, truncates the number of values
+        if they exceed the vector's dimensionality.  Since infinite
+        vectors have infinite values, they cannot be passed to a finite
+        vector constructor unless truncate is True.
+
+        Additionally, unless truncate is True, infinite vectors can only
+        be used as the final argument because values that follow cannot
+        be represented as they would follow an infinite sequence of 0s.
 
         Named components passed as keyword arguments are masked over any
         positional arguments.
         """
 
-        if len(args) > 1:
-            *prep, _ = args
-            if any(isinstance(item, Vector) for item in prep):
-                raise TypeError("Cannot append to infinite vector")
+        arg_it, args = iter(args), []
+        for arg in arg_it:
+            args.append(arg)
+            if isinstance(arg, cls._root) and arg.dim is None:
+                if not truncate and cls.dim is not None:
+                    raise TypeError("Infinite vector must be truncated")
+                if not truncate and list(arg_it):
+                    raise TypeError("Cannot append to infinite vector")
+                break
 
         comp_it = _crush(args)
+        
+        if truncate:
+            comp_it = it.islice(comp_it, cls.dim)
 
         if masks:
             try:
@@ -146,19 +216,35 @@ class Vector(metaclass=VectorType):
         return f"{name}({', '.join(map(repr, self))})"
 
     def __str__(self):
+        # TODO: Maybe indicate infinite vectors?
         return f"<{', '.join(map(str, self))}>"
+
+    @types.DynamicClassAttribute
+    def dim(self):
+        return type(self).dim
 
     @classmethod
     def from_iterable(cls, iterable):
         """
         Construct vector from an iterable
 
-        Equivalent to Vector(iterable).  It is recommended to use the
-        Vector constructor when constructing vectors from iterables.
+        Equivalent to ``Vector(iterable)``.  However, it is recommended
+        to use the Vector constructor when constructing vectors from
+        iterables.  ``from_iterable`` is mostly for internal use.
         """
 
+        data = tuple(iterable)
+        comps = len(data)
+
+        if cls.dim is not None:
+            if cls.dim > comps:
+                data += (0,) * (cls.dim - comps)
+            elif cls.dim < comps:
+                raise TypeError(f"{cls.dim} dimensional vector cannot "
+                                f"have {comps} components")
+
         self = object.__new__(cls)
-        self.__data = tuple(iterable)
+        self.__data = data
         self.__frozen = True
         return self
 
@@ -171,7 +257,7 @@ class Vector(metaclass=VectorType):
         """
 
         mapping = dict(mapping)
-        dims = max(mapping, default=0) + 1
+        dims = max(mapping, default=-1) + 1
         base = list(base)
         data = base + [0] * (dims - len(base))
 
@@ -219,17 +305,27 @@ class Vector(metaclass=VectorType):
         Returns a vector in hyperspherical space representing the
         direction of self.
 
+        The ``heading`` property consistently returns a vector, even in
+        the two-dimensional case (where it returns a Vector[1]).  If a
+        scalar is desired, use ``heading2`` instead.
+
         Effectively the inverse of ``from_spherical``
         """
 
-        comps = reversed(list(self.pad_iter(2)))
+        comps = reversed(list(_zpad(self, to=2)))
 
         data = []
         opp = next(comps)
         for adj in comps:
             data.append(math.atan2(opp, adj))
             opp = math.hypot(opp, adj)
-        return self.from_iterable(reversed(data))
+
+        if self.dim is None:
+            cls = type(self)
+        else:
+            cls = type(self)[len(data)]
+
+        return cls.from_iterable(reversed(data))
 
     @property
     def heading2(self):
@@ -242,7 +338,7 @@ class Vector(metaclass=VectorType):
 
         return math.atan2(self.y, self.x)
 
-    def angle_between(self, other, *, strict=False):
+    def angle(self, other, *, strict=False):
         """
         Calculates the angle between two vectors.
 
@@ -256,9 +352,9 @@ class Vector(metaclass=VectorType):
             cos_theta = self.dot(other) / abs(self) / abs(other)
             # Due to floating-point shenanigans, we sometimes end up
             # with a value slightly outside the domain of acos.  For
-            # now, we just limit it to the domain.  It feels a little
+            # now, we just clamp it to the domain.  It feels a little
             # sketchy to do that, but it's probably fine.
-            return math.acos(_limit(cos_theta, -1, 1))
+            return math.acos(_clamp(cos_theta, -1, 1))
         except ZeroDivisionError:
             if not strict:
                 return 0
@@ -282,9 +378,10 @@ class Vector(metaclass=VectorType):
         """ Distance between two coordinate vectors """
         return abs(self - other)
 
-    def normalize(self):
+    @property
+    def unit(self):
         """
-        Return a scaled vector with magnitude 1
+        Return a scaled vector with magnitude 1 in the direction of self
         Equivalent to self.with_mag(1)
         """
         return self / abs(self)
@@ -293,37 +390,19 @@ class Vector(metaclass=VectorType):
         """ Return a scaled vector with magnitude ``mag`` """
         if mag:
             return self * (mag / abs(self))
-        # Return a zero vector if we can to avoid dividing by zero
-        return type(self)()
+        # Return a zero vector if we can to avoid needlessly dividing.
+        return type(self).zero
 
-    def limit_mag(self, min_mag, max_mag=None):
+    def clamp_mag(self, min_mag, max_mag=None):
         """ Limit the magnitude of a vector between two bounds """
 
         if max_mag is None:
             max_mag = min_mag
             min_mag = 0
         if 0 <= min_mag <= max_mag:
-            return self.with_mag(_limit(abs(self), min_mag, max_mag))
-        raise ValueError("Magnitude limits must be such that "
+            return self.with_mag(_clamp(abs(self), min_mag, max_mag))
+        raise ValueError("Magnitude bounds must be such that "
                          "0 <= min_mag <= max_mag")
-
-    def dot(self, other):
-        """ Dot product of two vectors """
-        if isinstance(other, type(self)):
-            return sum(_zmap(operator.mul, self, other))
-        raise TypeError("Dot product operands must be of the same type")
-
-    def __matmul__(self, other):
-        """ vec_1 @ vec_2: alias for ``vec_1.dot(vec_2)`` """
-        return self.dot(other)
-
-    def project(self, onto):
-        """ Project a vector onto the line defined by ``onto`` """
-        return onto.with_mag(self.dot(onto.normalize()))
-
-    def reflect(self, normal):
-        """ Reflect a vector across a normal """
-        return self - 2 * self.project(normal)
 
     @_ClassyMethod
     def cross(cls, *vecs):
@@ -337,11 +416,19 @@ class Vector(metaclass=VectorType):
 
         n = len(vecs) + 1
 
+        if None is not cls.dim != n:
+            raise TypeError(f"The {cls.dim} dimensional cross product "
+                            f"takes {cls.dim - 1} vectors")
+
+        if not all(isinstance(vec, cls._root) for vec in vecs):
+            raise TypeError(f"Cross product operands must be instances "
+                            f"of {cls._root.__name__!r}")
+        
         # Matrix with n-1 column vectors from vecs.  The final column is
         # made up of corresponding unit vectors.  This particular
         # transpose is chosen because it prevents the vectors in that
         # last column from getting multiplied later on.
-        mat = list(zip(*[it.islice(vec.pad_iter(), n) for vec in vecs],
+        mat = list(zip(*[it.islice(_zpad(vec), n) for vec in vecs],
                        [cls.from_mapping({c: 1}) for c in range(n)]))
 
         # The determinant of this matrix will be the cross product
@@ -354,7 +441,7 @@ class Vector(metaclass=VectorType):
                 det = -det
 
             if not mat[idx][idx]:
-                return cls()
+                return cls.zero
 
             det *= mat[idx][idx]
 
@@ -364,15 +451,39 @@ class Vector(metaclass=VectorType):
                             for a, b in zip(mat[idx], mat[row])]
         return det
 
+    @_ClassyMethod
+    def dot(cls, self, other):
+        """ Dot product of two vectors """
+        if not isinstance(other, cls._root):
+            raise TypeError(f"Dot product operands must be instances "
+                            f"of {cls._root.__name__!r}")
+        
+        return sum(_zmap(operator.mul, self, other))
+
+    def __matmul__(self, other):
+        """ vec_1 @ vec_2: alias for ``vec_1.dot(vec_2)`` """
+        return self.dot(other)
+
+    def project(self, onto):
+        """ Project a vector onto the line defined by ``onto`` """
+        return onto.with_mag(self.dot(onto.unit))
+
+    def reflect(self, normal):
+        """ Reflect a vector across a normal """
+        return self - 2 * self.project(normal)
+
     def __bool__(self):
         """ bool(vec): False if ``vec`` is the zero vector """
         return any(self)
 
     def __eq__(self, other):
         """ Two vectors are equal if all their components are equal """
-        if not isinstance(other, type(self)):
-            return False
-        return all(_zmap(operator.eq, self, other))
+        # The first two conditions SHOULD always be equivalent to
+        # type(self) == type(other), but this is more flexible to silly
+        # metaclass bugs.
+        return (isinstance(other, type(self)._root) and
+                self.dim == other.dim and
+                all(_zmap(operator.eq, self, other)))
 
     def __hash__(self):
         result = 0
@@ -380,68 +491,52 @@ class Vector(metaclass=VectorType):
             result ^= hash(comp) - hash(0)
         return result
 
-    def __lshift__(self, shift):
-        """
-        vector << integer
-
-        Shift the components of a vector; effectively equivalent to
-        ``vector[shift:]``
-        """
-
-        if shift < 0:
-            return self >> -shift
-        return self.from_iterable(it.islice(self, shift, None))
-
-    def __rshift__(self, shift):
-        """
-        vector >> integer
-
-        Shift the components of a vector
-        """
-        if shift < 0:
-            return self << -shift
-        return self.from_iterable(it.chain(it.repeat(0, shift), self))
-
     def __iter__(self):
         """
         Iterate over vector components
 
-        ``__iter__`` is a method of convenience.  It yields the _data_
-        associated with the vector.  It is not meant to represent the
-        infinite vector components in their entirety, but is guaranteed
-        to include all non-zero components.
+        ``__iter__`` yields only the relevant vector components in the
+        case of infinite vectors -- the infinite components are
+        truncated, but it is guaranteed to include all non-zero
+        components.  Use ``iter_all`` if a representation of all vector
+        components is desired for some reason.
         """
 
         return iter(self.__data)
 
-    def pad_iter(self, num=None):
+    def iter_all(self):
         """
-        Padded version of ``__iter__``
-
-        By default, returns an infinite iterator over all vector
-        components.
-
-        If ``num`` is passed, at least ``num`` items will be yielded.
-        vec.pad_iter(0) is equivalent to iter(vec).
+        For finite vectors, ``iter_all`` is equivalent to ``__iter__``.
+        For infinite vectors, the iterator ``iter_all`` returns will be
+        infinite, including all the infinite components of the vector.
         """
-        count = 0
-        for comp in self:
-            yield comp
-            count += 1
-        if num is None:
+
+        yield from self
+        if self.dim is None:
             yield from it.repeat(0)
-        else:
-            yield from it.repeat(0, num - count)
+
+    @staticmethod
+    def _dimkey(vec):
+        return (vec.dim is None, vec.dim)
 
     @classmethod
     def vectorize(cls, func):
-        """ func(0, 0, ...) is assumed to be 0 """
+        """
+        The vectorized function returns a vector directly related to
+        ``cls`` with the dimensions of the largest vector passed as an
+        argument.
+
+        When the vectorized function is passed an infinite vector,
+        ``func(0, 0, ...)`` is assumed to be ``0``.
+        """
+
         @functools.wraps(func)
         def vec_func(*vecs):
-            if not all(isinstance(vec, cls) for vec in vecs):
+            if not all(isinstance(vec, cls._root) for vec in vecs):
                 raise TypeError(f"All arguments must be instances of "
-                                f"{cls.__name__!r}")
-            return cls.from_iterable(_zmap(func, *vecs))
+                                f"{cls._root.__name__!r}")
+            container = cls[max(vecs, key=cls._dimkey).dim]
+            return container.from_iterable(_zmap(func, *vecs))
         return vec_func
 
     def __add__(self, other):
@@ -454,29 +549,37 @@ class Vector(metaclass=VectorType):
 
     def __mul__(self, other):
         """ vector * scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, type(self)._root):
             return NotImplemented
         return self.from_iterable(comp * other for comp in self)
 
     def __rmul__(self, other):
         """ scalar * vector """
-        return self * other
+        return self.__mul__(other)
 
     def __truediv__(self, other):
         """ vector / scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, type(self)._root):
             return NotImplemented
-        return self.from_iterable(
-            comp / other for comp in self.pad_iter(1)
-        )
+
+        # Ensure ZeroDivisionError is raised when necessary, even when
+        # there is nothing to iterate over.  0 seems to be the best
+        # choice of numerator, since in the case of infinite vectors we
+        # are simulating infinite divisions of 0 / other
+        if not self.__data:
+            0 / other
+
+        return self.from_iterable(comp / other for comp in self)
 
     def __floordiv__(self, other):
         """ vector // scalar """
-        if isinstance(other, Vector):
+        if isinstance(other, type(self)._root):
             return NotImplemented
-        return self.from_iterable(
-            comp // other for comp in self.pad_iter(1)
-        )
+
+        if not self.__data:
+            0 / other
+
+        return self.from_iterable(comp // other for comp in self)
 
     def __neg__(self):
         """ -vector """
@@ -490,23 +593,27 @@ class Vector(metaclass=VectorType):
         """ Rounds the vector, snapping it to the grid defined by n """
         return self.vectorize(functools.partial(round, ndigits=n))(self)
 
-    @staticmethod
-    def _translate_slice(idx):
-        """ Translate a slice of infinite space into __data space """
-        if None is not idx.step < 0:
-            raise ValueError("Vector slice step cannot be negative")
-        if None is not idx.start < 0:
-            return slice(0)
-        if None is not idx.stop < 0:
-            return slice(idx.start, None, idx.step)
-        return idx
+    @classmethod
+    def _translate_slice(cls, sl):
+        """
+        Translate a slice into __data space, taking into account
+        infinite vectors.  Returns an additional boolean that is True if
+        the slice represents an infinite number of values.
+        """
+        if cls.dim is not None:
+            return sl, False
+        if None is not sl.step < 0:
+            raise ValueError("Infinite vector slice step cannot be "
+                             "negative")
+        if None is not sl.start < 0:
+            return slice(0), sl.stop is None
+        if None is not sl.stop < 0:
+            return slice(sl.start, None, sl.step), True
+        return sl, sl.stop is None
 
     def __getitem__(self, idx):
         """
         idx is an index, a slice, or an iterable of indices.
-
-        Negative indices go backwards from the "end" of the infinite
-        vector and are thus guaranteed to be 0.
 
         The use of nested iterables or slice-iterable combinations as
         indices is undefined behavior.
@@ -516,24 +623,29 @@ class Vector(metaclass=VectorType):
             indices = tuple(idx)
         except TypeError:
             if isinstance(idx, slice):
-                idx = self._translate_slice(idx)
-                return self.from_iterable(self.__data[idx])
-
-            if idx < 0:
+                sl, inf = self._translate_slice(idx)
+                data = self.__data[sl]
+                dim = len(data) if not inf else None
+                return type(self)[dim].from_iterable(data)
+            if self.dim is None and idx < 0:
                 return 0
             try:
                 return self.__data[idx]
             except IndexError:
-                return 0
+                if self.dim is None:
+                    return 0
+                raise
         else:
-            return self.from_iterable(self[idx] for idx in indices)
+            return type(self)[len(indices)].from_iterable(
+                self[idx] for idx in indices
+            )
 
     def __getattr__(self, attr):
         """
-        Swizzle-style lookups.
+        Swizzle-style lookups
 
         In multi-character attributes, underscores may be used as
-        placeholders as a readable way to shift the vector.
+        placeholders for 0s.
         """
 
         try:
@@ -541,9 +653,10 @@ class Vector(metaclass=VectorType):
                 return self[self.get_name_group(attr).index(attr)]
 
             group = self.get_name_group(attr.replace("_", ""))
-            # TODO: I would prefer not rely on negative indices here
-            return self[(-1 if name == "_" else group.index(name)
-                         for name in attr)]
+            return type(self)[len(attr)].from_iterable(
+                self[group.index(name)] if name != "_" else 0
+                for name in attr
+            )
         except IndexError:
             raise AttributeError(f"{type(self).__name__!r} object "
                                  f"has no attribute {attr!r}") from None
@@ -563,8 +676,13 @@ class Vector(metaclass=VectorType):
         self._check_frost()
         return super().__delattr__(attr)
 
-    def __getnewargs__(self):
-        return self.__data
+    @classmethod
+    def _make_vec(cls, dim, iterable):
+        return cls[dim].from_iterable(iterable)
 
-    def __getstate__(self):
-        return None
+    def __reduce__(self):
+        return (type(self)._root._make_vec, (self.dim, self.__data))
+
+
+Vector2 = Vector._make_dim("Vector2", 2)
+Vector3 = Vector._make_dim("Vector3", 3)

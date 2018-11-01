@@ -1,4 +1,5 @@
 from .common import *
+import itertools
 
 @given(vectors())
 def test_identity_equality(vec):
@@ -7,13 +8,14 @@ def test_identity_equality(vec):
 
 @given(vectors())
 def test_hash_equality(vec):
-    """ Separate but equal vectors should have equal hashes """
-    new = V(vec)
+    """ Equal vectors should have equal hashes """
+    new = type(vec)(vec)
     # It would be valid for Vector(vec) to just return vec if I somehow
     # wanted it to in the future, but it would break this test.
     if new is vec:
-        raise RuntimeError("Test unable to run: must have two separate "
-                           "but equal vectors")
+        raise RuntimeError("Unable to run test: must have two distinct "
+                           "vectors of the same dimension and with "
+                           "equal components")
     assert vec == new
     assert hash(vec) == hash(new)
 
@@ -25,7 +27,7 @@ def test_pos_identity(vec):
 @given(vectors())
 def test_additive_identity(vec):
     """ The 0-vector should be an additive identity for vectors """
-    assert vec + V() == vec
+    assert vec + type(vec).zero == vec
 
 @given(vectors())
 def test_multiplicative_identity(vec):
@@ -37,6 +39,12 @@ def test_commutative_addition(vec_1, vec_2):
     """ Vector addition should be commutative """
     assert vec_1 + vec_2 == vec_2 + vec_1
 
+@given(vectors(), numbers())
+def test_add_scalar_fails(vector, scalar):
+    """ Adding a vector to a scalar is a TypeError """
+    with raises(TypeError):
+        vector + scalar
+
 @given(numbers(), vectors())
 def test_commutative_multiplication(scalar, vec):
     """ Vector scaling should be commutative """
@@ -46,6 +54,12 @@ def test_commutative_multiplication(scalar, vec):
 def test_commutative_dot(vec_1, vec_2):
     """ The dot product should be commutative """
     assert vec_1 @ vec_2 == vec_2 @ vec_1
+
+@given(vectors(), numbers())
+def test_dot_scalar_fails(vector, scalar):
+    """ Dotting a vector with a scalar is a TypeError """
+    with raises(TypeError):
+        vector @ scalar
 
 @given(numbers(), vectors(), vectors())
 def test_distributive(scalar, vec_1, vec_2):
@@ -84,39 +98,62 @@ def test_mult_reciprocal(vec, divisor):
 def test_floor_division(vec, divisor):
     """ The // operator should behave like the / operator floored """
     try:
-        floored_division = V.vectorize(math.floor)(vec / divisor)
+        floored_division = type(vec).vectorize(math.floor)(vec / divisor)
     except ZeroDivisionError:
         with raises(ZeroDivisionError):
             vec // divisor
     else:
         assert floored_division == vec // divisor
 
+@given(vectors(), vectors())
+def test_vector_muldiv_fails(vec_1, vec_2):
+    """ Multiplication or division of two vectors is a TypeError """
+    with raises(TypeError):
+        vec_1 * vec_2
+
+    with raises(TypeError):
+        vec_1 / vec_2
+
+    with raises(TypeError):
+        vec_1 // vec_2
+
+@given(numbers(), vectors())
+def test_vector_divisor_fails(scalar, vec):
+    """ Taking the reciprocal of a vector is a TypeError """
+    with raises(TypeError):
+        scalar / vec
+
+    with raises(TypeError):
+        scalar // vec
+
 @given(vectors())
 def test_repr(vec):
     """ repr(vec) be a Python expression representing vec """
     from fractions import Fraction
-    from hypervector import Vector
+    from hypervector import Vector, Vector2, Vector3
     assert isclose(vec, eval(repr(vec)))
 
 @given(vectors())
 def test_str(vec):
     """ str(vec) should be a human-readable string """
-    # I will make no other assertions about the format
-    assert isinstance(str(vec), str)
+    # I will make no assertions about the format other than it should be
+    # different from the repr (implying greater readability than Python
+    # code).
+    assert str(vec) != repr(vec)
 
 @given(vectors())
-def test_angle_between_zero(vec):
+def test_angle_between_vec_and_origin(vec):
     """ The angle between any vector and the 0-vector should be 0 """
-    assert vec.angle_between(V()) == 0
-    assert V().angle_between(vec) == 0
+    assert vec.angle(type(vec).zero) == 0
+    assert type(vec).zero.angle(vec) == 0
 
 @given(vectors())
-def test_strict_angle_between_zero(vec):
+def test_strict_angle_between_vec_and_origin(vec):
     """ If strict is passed, ZeroDivisionError should be raised """
     with raises(ZeroDivisionError):
-        vec.angle_between(V(), strict=True)
+        vec.angle(type(vec).zero, strict=True)
     with raises(ZeroDivisionError):
-        V().angle_between(vec, strict=True)
+        type(vec).zero.angle(vec, strict=True)
 
 @given(vectors())
 def test_mag_aliases(vec):
@@ -138,41 +175,41 @@ def test_with_mag(vec, mag):
     assert isclose(vec.with_mag(mag).mag, mag)
 
 @given(vectors())
-def test_normalize_with_mag(vec):
-    """ vec.normalize() and vec.with_mag(1) should behave the same """
+def test_unit_vs_with_mag(vec):
+    """ vec.unit and vec.with_mag(1) should behave the same """
     try:
         mag_1 = vec.with_mag(1)
     except ZeroDivisionError:
         with raises(ZeroDivisionError):
-            vec.normalize()
+            vec.unit
     else:
-        assert isclose(mag_1, vec.normalize())
+        assert isclose(mag_1, vec.unit)
 
 @given(normals(), numbers(min_value=0), numbers(min_value=0))
-def test_limit_mag(vec, bound_1, bound_2):
-    """ limit_mag should return a vector with a magnitude in bounds """
+def test_clamp_mag(vec, bound_1, bound_2):
+    """ clamp_mag should return a vector with a magnitude in bounds """
     min_mag = min(bound_1, bound_2)
     max_mag = max(bound_1, bound_2)
-    lim_mag = vec.limit_mag(min_mag, max_mag).mag
+    lim_mag = vec.clamp_mag(min_mag, max_mag).mag
     assert (min_mag <= lim_mag <= max_mag or
             isclose(lim_mag, min_mag) or isclose(lim_mag, max_mag))
 
 @given(normals())
-def test_limit_mag_negative(vec):
-    """ Negative magnitude limits should raise a ValueError """
+def test_clamp_mag_negative(vec):
+    """ Negative magnitude clamp bounds should raise a ValueError """
     with raises(ValueError):
-        vec.limit_mag(-2, -1)
+        vec.clamp_mag(-2, -1)
 
 @given(normals())
-def test_limit_mag_wrong_order(vec):
+def test_clamp_mag_wrong_order(vec):
     """ A ValueError should be raised if min_mag > max_mag """
     with raises(ValueError):
-        vec.limit_mag(2, 1)
+        vec.clamp_mag(2, 1)
 
 @given(normals())
-def test_normal_normalize(normal):
-    """ normal.normalize() should be the identity function """
-    assert isclose(normal, normal.normalize())
+def test_normal_unit_vec(normal):
+    """ normal.unit should be the identity function """
+    assert isclose(normal, normal.unit)
 
 @given(vectors(), vectors())
 def test_dot_matmul(vec_1, vec_2):
@@ -182,7 +219,7 @@ def test_dot_matmul(vec_1, vec_2):
 @given(vectors(), normals())
 def test_project_parallel(vec, onto):
     """ vec.project(onto) should be parallel to onto """
-    theta = V.angle_between(onto, vec.project(onto))
+    theta = onto.angle(vec.project(onto))
     assert isclose(math.sin(theta), 0)
 
 @given(vectors(), normals())
@@ -200,9 +237,9 @@ def test_project_dist(vec, onto):
     Vector.dist should demonstrate the properties of this triangle.
     """
     projection = vec.project(onto)
-    a = V.dist(projection, onto)
-    b = V.dist(vec, projection)
-    c = V.dist(vec, onto)
+    a = projection.dist(onto)
+    b = vec.dist(projection)
+    c = vec.dist(onto)
     assert isclose(a ** 2 + b ** 2, c ** 2)
 
 @given(vectors(), normals())
@@ -210,8 +247,8 @@ def test_reflect_direction(vec, normal):
     """ The direction of a reflected vector should be reflected """
     reflected = vec.reflect(normal)
     # Use sin to allow reflections from behind
-    assert isclose(math.sin(V.angle_between(vec, normal)),
-                   math.sin(V.angle_between(reflected, normal)))
+    assert isclose(math.sin(vec.angle(normal)),
+                   math.sin(reflected.angle(normal)))
 
 @given(vectors(), normals())
 def test_reflect_mag(vec, normal):
@@ -219,21 +256,36 @@ def test_reflect_mag(vec, normal):
     reflected = vec.reflect(normal)
     assert isclose(vec.mag, reflected.mag)
 
-@given(st.lists(vectors()))
-def test_cross_orthogonality(vecs):
+@given(st.data())
+def test_cross_orthogonality(data):
     """ The cross product should be orthogonal to its operands """
-    ortho = V.cross(*vecs).limit_mag(1)
-    for vec in vecs:
-        assert isclose(ortho @ vec.limit_mag(1), 0)
+    cls = data.draw(vector_types(min_size=1), label="cls")
+    nvecs = cls.dim and cls.dim - 1
+    vecs = data.draw(
+        st.lists(vectors(), min_size=nvecs, max_size=nvecs),
+        label="vecs"
+    )
 
-@given(vectors(), vectors())
-def test_classy_cross_works(vec1, vec2):
+    ortho = cls.cross(*vecs).clamp_mag(1)
+    for vec in vecs:
+        assert isclose(ortho @ vec.clamp_mag(1), 0)
+
+@given(finite_vector_types(), st.lists(vectors()))
+def test_finite_cross_must_have_n_minus_1_operands(cls, vecs):
     """
-    The cross product method should act like any other method
-    We want to test this for cross because .cross() is a ClassyMethod.
-    All other methods are assumed to work properly.
+    Taking the finite cross product with any other number of operands
+    than n - 1, where n is the dimensions of the vector, should be a
+    TypeError.
     """
-    assert vec1.cross(vec2) == V.cross(vec1, vec2)
+    assume(len(vecs) != cls.dim - 1)
+    with raises(TypeError):
+        cls.cross(*vecs)
+
+@given(infinite_vectors(), numbers())
+def test_cross_scalar_fails(vec, scalar):
+    """ Crossing a vector with a scalar should be a TypeError """
+    with raises(TypeError):
+        vec.cross(scalar)
 
 @given(vectors())
 def test_bool(vec):
@@ -246,7 +298,8 @@ def test_bool(vec):
     else:
         assert vec
 
-@given(vectors(average_size=2, max_size=5))
+# Limit size of vectors so this test doesn't take too long
+@given(vectors(max_size=5))
 def test_round(vec):
     """
     round(vec) should return the closest grid vector
@@ -255,10 +308,9 @@ def test_round(vec):
 
     This is a silly, largely pointless test.
     """
-    import itertools
     orderings = itertools.product([math.floor, math.ceil],
                                   repeat=len(list(vec)))
-    closest = min((V(func(val) for func, val in zip(funcs, vec))
+    closest = min((type(vec)(func(val) for func, val in zip(funcs, vec))
                    for funcs in orderings),
                   key=vec.dist)
     assert (closest == round(vec) or
@@ -282,17 +334,16 @@ def test_not_equal_to_iter(vec):
     """ Vectors should not be equal to their corresponding iterator """
     assert vec != iter(vec)
 
-@given(vectors(), st.integers(max_value=100))
-def test_pad_iter(vec, n):
-    """ pad_iter should yield all data needed to recreate the vector """
-    assert vec.from_iterable(vec.pad_iter(n)) == vec
+@given(finite_vectors())
+def test_finite_iter_all(fin_vec):
+    """ iter_all should be equivalent to iter for finite vectors """
+    assert list(fin_vec.iter_all()) == list(iter(fin_vec))
 
-@given(vectors(), st.integers(max_value=100))
-def test_pad_iter_length(vec, n):
-    """ pad_iter should yield at least as many values as the padding """
-    assert len(list(vec.pad_iter(n))) >= n
-
-@given(vectors())
-def test_pad_iter_0(vec):
-    """ vec.pad_iter(0) should be equivalent to iter(vec) """
-    assert list(vec.pad_iter(0)) == list(vec)
+@given(infinite_vectors())
+def test_infinite_iter_all(inf_vec):
+    """ iter_all should be infinite for infinite vectors """
+    prefix = list(inf_vec)
+    iterator = inf_vec.iter_all()
+    assert list(itertools.islice(iterator, len(prefix))) == prefix
+    assert (list(itertools.islice(iterator, SIDEWAYS_INFINITY)) == 
+            [0] * SIDEWAYS_INFINITY)
