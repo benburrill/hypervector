@@ -7,8 +7,8 @@ def test_zero_property(cls):
 
 @given(vector_types())
 def test_construct_zero(cls):
-    """ Vector() should be the 0-vector """
-    assert cls() == cls.zero
+    """ Vector() and Vector(0, ...) should be the 0-vector """
+    assert cls.zero == cls() == cls(*([0] * (cls.dim or 0)))
 
 @given(vectors())
 def test_construction_identity(vec):
@@ -43,6 +43,11 @@ def test_iterable_construction(data):
 
 @given(st.data())
 def test_finite_vector_pads_missing_components(data):
+    """
+    Finite vectors should add enough trailing 0 components to fit the
+    dimensions of the vector.
+    """
+
     cls = data.draw(finite_vector_types(), label="cls")
     l = data.draw(num_lists(max_size=cls.dim), label="l")
 
@@ -106,6 +111,7 @@ def test_no_infinite_vector_in_finite_constructor(cls, begin, inf_vec):
     Infinite vectors cannot be passed to finite vector constructors
     without setting truncate to True.
     """
+
     with raises(TypeError):
         cls(*begin, inf_vec)
 
@@ -142,10 +148,6 @@ def test_truncate_with_infinite_vector(cls, begin, inf_vec, end):
 
     assert (cls(*begin, inf_vec, *end, truncate=True) ==
             cls(*begin, inf_vec, truncate=True))
-
-_mappings = st.dictionaries(
-    st.integers(min_value=0, max_value=100), numbers()
-)
 
 @given(st.data())
 def test_from_mapping(data):

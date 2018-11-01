@@ -8,8 +8,22 @@ def test_unit_vecs(cls):
     assert cls(0, 0, 1) == cls.z == cls.k == cls.b
     assert cls(0, 0, 0, 1) == cls.w == cls.a
 
+@given(vector_types())
+def test_bad_unit_vectors(cls):
+    """
+    Test that getting invalid unit vectors results in an AttributeError
+    Also helps to ensure that the underscore is not used in a name group
+    """
+    with raises(AttributeError):
+        cls._
+
 @given(finite_vector_types(max_size=3))
-def test_bad_unit_vecs(cls):
+def test_unit_vectors_that_are_too_big(cls):
+    """
+    AttributeError should also be raised for unit vectors that are of
+    invalid dimensions for small vector types.
+    """
+
     with raises(AttributeError):
         cls.w
 
@@ -22,21 +36,21 @@ def test_no_class_swizzling(cls):
     with raises(AttributeError):
         cls.xyz
 
-@given(vector_types())
-def test_bad_class_attr(cls):
-    """
-    Test that getting invalid unit vectors results in an AttributeError
-    Also helps to ensure that the underscore is not used in a name group
-    """
-    with raises(AttributeError):
-        cls._
-
 @given(st.integers(min_value=0, max_value=100))
 def test_finite_vector_types(dim):
+    """
+    Finite vector types constructed with class subscript should have the
+    dimension they were created with.
+    """
+
     assert V[dim].dim == dim
 
 @given(st.integers(max_value=-1))
 def test_no_negative_dimensional_vectors(dim):
+    """
+    Creating negative dimensional vector types should not be allowed.
+    """
+
     with raises(TypeError):
         V[dim]
 
@@ -145,6 +159,11 @@ def test_get_component_attr(vec):
 
 @given(finite_vectors(max_size=3))
 def test_finite_vectors_get_bad_component_attr(vec):
+    """
+    Vector should not have component attributes for components outside
+    their dimension.
+    """
+
     with raises(AttributeError):
         vec.w
 
@@ -187,6 +206,12 @@ def test_immutability(vec):
         del vec.x
 
 def test_classy_methods():
+    """
+    The internal _ClassyMethod method descriptor should get an argument
+    for the class (like classmethod) as well as an argument for the
+    object it was called on if it wasn't the class (like normal methods).
+    """
+
     from hypervector import _ClassyMethod
 
     class Dummy:

@@ -41,6 +41,7 @@ def test_commutative_addition(vec_1, vec_2):
 
 @given(vectors(), numbers())
 def test_add_scalar_fails(vector, scalar):
+    """ Adding a vector to a scalar is a TypeError """
     with raises(TypeError):
         vector + scalar
 
@@ -56,6 +57,7 @@ def test_commutative_dot(vec_1, vec_2):
 
 @given(vectors(), numbers())
 def test_dot_scalar_fails(vector, scalar):
+    """ Dotting a vector with a scalar is a TypeError """
     with raises(TypeError):
         vector @ scalar
 
@@ -105,6 +107,7 @@ def test_floor_division(vec, divisor):
 
 @given(vectors(), vectors())
 def test_vector_muldiv_fails(vec_1, vec_2):
+    """ Multiplication or division of two vectors is a TypeError """
     with raises(TypeError):
         vec_1 * vec_2
 
@@ -116,6 +119,7 @@ def test_vector_muldiv_fails(vec_1, vec_2):
 
 @given(numbers(), vectors())
 def test_vector_divisor_fails(scalar, vec):
+    """ Taking the reciprocal of a vector is a TypeError """
     with raises(TypeError):
         scalar / vec
 
@@ -268,12 +272,18 @@ def test_cross_orthogonality(data):
 
 @given(finite_vector_types(), st.lists(vectors()))
 def test_finite_cross_must_have_n_minus_1_operands(cls, vecs):
+    """
+    Taking the finite cross product with any other number of operands
+    than n - 1, where n is the dimensions of the vector, should be a
+    TypeError.
+    """
     assume(len(vecs) != cls.dim - 1)
     with raises(TypeError):
         cls.cross(*vecs)
 
 @given(infinite_vectors(), numbers())
 def test_cross_scalar_fails(vec, scalar):
+    """ Crossing a vector with a scalar should be a TypeError """
     with raises(TypeError):
         vec.cross(scalar)
 
